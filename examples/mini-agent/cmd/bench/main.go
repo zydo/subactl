@@ -19,7 +19,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: bench run [flags] | bench extract TASK DIR | bench hog [flags]")
+		fmt.Fprintln(os.Stderr, "usage: bench run [flags] | bench report --in DIR --out DIR | bench extract TASK DIR | bench hog [flags]")
 		os.Exit(2)
 	}
 	var err error
@@ -35,6 +35,8 @@ func main() {
 		err = (&scenarios.Scenario{Task: os.Args[2]}).Extract(os.Args[3])
 	case "hog":
 		err = hog(os.Args[2:])
+	case "report":
+		err = report(os.Args[2:])
 	default:
 		err = fmt.Errorf("unknown command %q: want run or hog", os.Args[1])
 	}
@@ -145,4 +147,31 @@ func stateDir(out, group string, run int) string {
 		return filepath.Join(out, group, "state")
 	}
 	return filepath.Join(out, group, fmt.Sprintf("run-%d", run), "state")
+}
+
+// report turns the measurements of the groups into the report: verdicts
+// on the hypotheses, tables, charts and the raw series as Parquet.
+func report(args []string) error {
+	fs := flag.NewFlagSet("report", flag.ExitOnError)
+	in := fs.String("in", "", "directory holding the groups' results (A, B, C)")
+	out := fs.String("out", "", "directory to write the report into (default: the input directory)")
+	fs.Parse(args)
+	if *in == "" {
+		return fmt.Errorf("--in is required")
+	}
+	if *out == "" {
+		*out = *in
+	}
+	groups, err := bench.LoadResults(*in)
+	if err != nil {
+		return err
+	}
+	verdicts, err := bench.WriteReport(*out, groups)
+	if err != nil {
+		return err
+	}
+	for _, v := range verdicts {
+		fmt.Printf("%s %s: %s\n", v.ID, v, v.Evidence)
+	}
+	return nil
 }
