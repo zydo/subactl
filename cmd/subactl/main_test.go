@@ -262,7 +262,7 @@ func TestStrictHTTP(t *testing.T) {
 		{"POST", "/v1/leases", ``, 400, api.ErrInvalidArgument, ""},
 		{"POST", "/v1/leases", `{"envelope":{"memory":1024}` + uid + `} trailing`, 400, api.ErrInvalidArgument, ""},
 		{"GET", "/v1/leases/ls_nope", ``, 404, api.ErrNotFound, ""},
-		{"GET", "/v1/leases/ls_nope/attach", ``, 501, api.ErrNotImplemented, ""},
+		{"GET", "/v1/leases/ls_nope/attach", ``, 400, api.ErrInvalidArgument, "Upgrade"},
 		{"POST", "/v1/leases/ls_nope/notify", `{"type":"NEAR_LIMIT"}`, 404, api.ErrNotFound, ""},
 	} {
 		status, e := do(tc.method, tc.path, tc.body)
@@ -303,10 +303,12 @@ func TestRunInteractive(t *testing.T) {
 				buf := make([]byte, 256)
 				n, _ := slave.Read(buf)
 				fmt.Fprintf(slave, "you said: %s", buf[:n])
-				slave.Close()
 				got <- strings.TrimSpace(string(buf[:n]))
-				time.Sleep(100 * time.Millisecond)
+				// Let the output be relayed before the terminal goes away:
+				// closing the last slave end may discard what is unread.
+				time.Sleep(200 * time.Millisecond)
 				f.Exit(leases[0].ID, backend.ExitStatus{})
+				slave.Close()
 				return
 			}
 			time.Sleep(5 * time.Millisecond)

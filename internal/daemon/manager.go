@@ -611,6 +611,13 @@ func (m *Manager) reap(id api.LeaseID, code int, evidence map[string]any) {
 		delete(m.rt, mk.ID)
 		m.mu.Unlock()
 		if rt.tty != nil {
+			// Every process is gone, so the terminal reports end of file
+			// once its last output has been read. Give the relay a moment
+			// to deliver that before the master end is closed.
+			select {
+			case <-rt.tty.closed:
+			case <-time.After(500 * time.Millisecond):
+			}
 			rt.tty.close()
 		}
 		m.ended(ls, term)
