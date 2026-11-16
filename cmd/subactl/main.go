@@ -36,6 +36,11 @@ const usage = `usage: subactl [--socket PATH] <command> [flags] [-- command...]
   trace LEASE                  timeline of a lease: usage series, events, termination
   audit --lease LEASE          the same timeline, for a lease that ended long ago
   events                       follow the events you may see, one JSON object per line
+  notify LEASE --type T        put a control message in a descendant's inbox
+  inbox                        follow your own lease's control messages
+  beacon --state S [--tool T]  report progress: working, awaiting_input or done
+  done [--result PATH]         report that the task is finished; PATH is in your scratch directory
+  resize-request --memory S    ask your parent for a larger envelope
   metrics                      Prometheus metrics
 
 Sizes take a binary suffix (512M, 8G). LEASE may be "self" inside a lease.
@@ -45,7 +50,7 @@ A command that waits for a lease exits 0 if it ended with a 2xx code, else 3.
 
 // pending names commands that land in later milestones.
 var pending = map[string]string{
-	"top": "M4", "done": "M4",
+	"top": "M4",
 }
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
@@ -76,6 +81,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		"host": c.host, "run": c.run, "spawn": c.spawn, "available": c.available,
 		"ls": c.ls, "get": c.get, "resize": c.resize, "terminate": c.terminate,
 		"kill": c.kill, "wait-children": c.waitChildren,
+		"notify": c.notify, "inbox": c.inbox, "beacon": c.beacon, "done": c.done, "resize-request": c.resizeRequest,
 		"suggest": c.suggest, "trace": c.trace, "audit": c.audit, "events": c.events, "metrics": c.metrics,
 	}
 	h, ok := handlers[cmd]
@@ -513,5 +519,77 @@ func (c *cli) metrics(ctx context.Context, args []string) (int, error) {
 		return 1, err
 	}
 	fmt.Fprint(c.out, text)
+	return 0, nil
+}
+
+func (c *cli) notify(ctx context.Context, args []string) (int, error) {
+	id, rest, err := leaseArg(args, "")
+	if err != nil {
+		return 2, err
+	}
+	fs := c.flags("notify")
+	typ := fs.String("type", "", "TERMINATE_REQUESTED, NEAR_LIMIT, RESIZED or CAPACITY_SHRUNK")
+	reason := fs.String("reason", "", "free text shown to the agent")
+	if err := fs.Parse(rest); err != nil {
+		return 2, err
+	}
+	if err := c.api.Notify(ctx, id, api.NotifyRequest{Type: *typ, Reason: *reason}); err != nil {
+		return 1, err
+	}
+	return 0, nil
+}
+
+func (c *cli) inbox(ctx context.Context, args []string) (int, error) {
+	if err := c.flags("inbox").Parse(args); err != nil {
+		return 2, err
+	}
+	enc := json.NewEncoder(c.out)
+	err := c.api.Inbox(ctx, api.Self, func(m api.InboxMessage) error { return enc.Encode(m) })
+	if err != nil && ctx.Err() == nil {
+		return 1, err
+	}
+	return 0, nil
+}
+
+func (c *cli) beacon(ctx context.Context, args []string) (int, error) {
+	fs := c.flags("beacon")
+	state := fs.String("state", "working", "working, awaiting_input or done")
+	tool := fs.String("tool", "", "name of the tool about to run; never its arguments")
+	seq := fs.Int64("seq", 0, "tool-call sequence number")
+	turns := fs.Int64("turns", 0, "turns so far")
+	if err := fs.Parse(args); err != nil {
+		return 2, err
+	}
+	if err := c.api.Progress(ctx, api.Self, api.ProgressRequest{State: *state, Tool: *tool, Seq: *seq, Turns: *turns}); err != nil {
+		return 1, err
+	}
+	return 0, nil
+}
+
+func (c *cli) done(ctx context.Context, args []string) (int, error) {
+	fs := c.flags("done")
+	result := fs.String("result", "", "path of the result file, inside your scratch directory ($SUBACTL_SCRATCH)")
+	if err := fs.Parse(args); err != nil {
+		return 2, err
+	}
+	if err := c.api.Progress(ctx, api.Self, api.ProgressRequest{State: "done", Result: *result}); err != nil {
+		return 1, err
+	}
+	return 0, nil
+}
+
+func (c *cli) resizeRequest(ctx context.Context, args []string) (int, error) {
+	fs := c.flags("resize-request")
+	var memory sizeFlag
+	fs.Var(&memory, "memory", "the memory limit you are asking for, e.g. 6G")
+	if err := fs.Parse(args); err != nil {
+		return 2, err
+	}
+	if !memory.set {
+		return 2, errors.New("--memory is required, e.g. subactl resize-request --memory 6G")
+	}
+	if err := c.api.RequestResize(ctx, api.Self, api.ResizeAsk{Memory: memory.n}); err != nil {
+		return 1, err
+	}
 	return 0, nil
 }

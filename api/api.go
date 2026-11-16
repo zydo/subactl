@@ -174,6 +174,9 @@ type Lease struct {
 	OnNearLimit *OnNearLimit `json:"on_near_limit,omitempty"`
 	Usage       *Usage       `json:"usage,omitempty"`
 	Termination *Termination `json:"termination,omitempty"`
+	// Scratch is the lease's scratch directory: its stdout and stderr files
+	// and whatever it leaves there for its planner.
+	Scratch string `json:"scratch,omitempty"`
 }
 
 // LeaseList is the body of GET /v1/leases.

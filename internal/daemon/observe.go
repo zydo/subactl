@@ -111,6 +111,9 @@ func (m *Manager) publish(typ string, lease api.LeaseID, data map[string]any) {
 	if o.audit != nil {
 		o.audit.Write(audit.Record{At: e.At, Type: audit.TypeEvent, Lease: lease, Path: path, Kind: kind, OwnerUID: owner, Event: &e.Event})
 	}
+	if lease != "" {
+		m.notifyInbox(typ, lease)
+	}
 }
 
 // auditLease writes a record about a lease.
@@ -167,6 +170,7 @@ func (m *Manager) tickLoop(ctx context.Context) {
 		}
 		usage := m.sampleAll(ctx)
 		m.trackCapacity(usage)
+		m.checkIdle()
 	}
 }
 

@@ -42,6 +42,11 @@ type Config struct {
 	// SafetyWindow is what planners get between the warning and the first
 	// safety-net termination (default 5s).
 	SafetyWindow time.Duration
+	// StallNotice is how long a working lease may be silent before its
+	// planner is told (default 10m); MaxIdle is when it is reaped (default
+	// 30m). MaxIdleDone is how long a lease that reported done may stay
+	// alive (default 60s).
+	StallNotice, MaxIdle, MaxIdleDone time.Duration
 	// Audit receives the audit records; nil keeps none.
 	Audit *audit.Log
 	// AuditDir is where traces of leases no longer in memory are read from.
@@ -115,6 +120,7 @@ type Manager struct {
 	abandoned atomic.Bool
 
 	obs *observer
+	ctl *control
 
 	admit sync.Mutex // serialises ledger-plus-backend changes to reservations
 	mu    sync.Mutex
@@ -137,6 +143,15 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 	if cfg.SafetyWindow == 0 {
 		cfg.SafetyWindow = 5 * time.Second
 	}
+	if cfg.StallNotice == 0 {
+		cfg.StallNotice = 10 * time.Minute
+	}
+	if cfg.MaxIdle == 0 {
+		cfg.MaxIdle = 30 * time.Minute
+	}
+	if cfg.MaxIdleDone == 0 {
+		cfg.MaxIdleDone = time.Minute
+	}
 	if cfg.DefaultSuggestion == 0 {
 		cfg.DefaultSuggestion = 2 << 30
 	}
@@ -153,7 +168,7 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 		cfg: cfg, be: cfg.Backend, log: cfg.Log,
 		led: ledger.New(cfg.Capacity), rt: map[api.LeaseID]*runtime{},
 	}
-	m.obs = newObserver(cfg)
+	m.obs, m.ctl = newObserver(cfg), newControl()
 	if cfg.Host != nil {
 		// Start from a real reading rather than from the bare cap.
 		if h, err := cfg.Host.Read(); err == nil {
@@ -586,6 +601,7 @@ func (m *Manager) reap(id api.LeaseID, code int, evidence map[string]any) {
 		delete(m.rt, mk.ID)
 		m.mu.Unlock()
 		m.ended(ls, term)
+		m.forget(ls)
 		close(rt.done)
 		m.log.Info("lease reaped", "lease", mk.ID, "code", final, "name", term.Name)
 	}
@@ -635,6 +651,7 @@ func (m *Manager) record(ls api.Lease, code int, u api.Usage, ev map[string]any)
 
 // withUsage attaches a fresh sample to a live lease.
 func (m *Manager) withUsage(ctx context.Context, ls api.Lease) api.Lease {
+	ls.Scratch = m.scratchDir(ls.ID)
 	if rt := m.runtime(ls.ID); rt != nil {
 		if u, err := m.be.Sample(ctx, rt.group); err == nil {
 			ls.Usage = &u
@@ -801,7 +818,9 @@ func (m *Manager) terminated(ctx context.Context, id api.LeaseID) (api.Terminati
 // the grace period, then SIGTERM its main process, then kill the whole
 // tree. The ladder runs to the end even if the caller goes away.
 //
-// TODO(M4): step one also delivers TERMINATE_REQUESTED to the lease's inbox.
+// Step one puts TERMINATE_REQUESTED, with the reason and the deadline, in
+// the lease's inbox; with recursive, in every descendant's too. An agent
+// with an adapter saves its progress and exits; one without never sees it.
 func (m *Manager) Terminate(ctx context.Context, c Caller, id api.LeaseID, req api.TerminateRequest) (api.Termination, error) {
 	ls, err := m.resolve(c, id)
 	if err != nil {
@@ -830,6 +849,20 @@ func (m *Manager) Terminate(ctx context.Context, c Caller, id api.LeaseID, req a
 	}
 	m.mu.Unlock()
 	if start {
+		source := "operator"
+		if c.Lease != "" {
+			source = string(c.Lease)
+		}
+		deadline := time.Now().Add(grace)
+		targets := []api.Lease{ls}
+		if req.Recursive {
+			targets = m.led.Subtree(ls.ID)
+		}
+		for _, t := range targets {
+			if t.State == api.StateRunning {
+				m.deliver(t.ID, api.MsgTerminateRequested, source, cleanText(req.Reason, maxReason), &deadline)
+			}
+		}
 		go m.ladder(ls.ID, rt, proc, code, grace)
 	}
 	return m.terminated(ctx, ls.ID)

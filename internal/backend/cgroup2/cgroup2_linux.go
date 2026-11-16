@@ -405,6 +405,14 @@ func ownOOMs(dir string) int64 {
 	return vals["oom"]
 }
 
+// RemoveScratch deletes a lease's scratch directory.
+func (b *Backend) RemoveScratch(lease api.LeaseID) error {
+	if !validLease(lease) {
+		return fmt.Errorf("cgroup2: invalid lease id %q", lease)
+	}
+	return os.RemoveAll(b.ScratchDir(lease))
+}
+
 // OutputBytes is the size of the lease's stdout and stderr files.
 func (b *Backend) OutputBytes(_ context.Context, g backend.ACGroup) (int64, error) {
 	var n int64
@@ -473,7 +481,6 @@ func (b *Backend) Destroy(_ context.Context, g backend.ACGroup) error {
 			b.mu.Lock()
 			delete(b.dirs, g.Ref().Lease)
 			b.mu.Unlock()
-			_ = os.RemoveAll(b.ScratchDir(g.Ref().Lease)) // TODO(M4): keep until the parent lease ends
 			return nil
 		}
 		if !errors.Is(rerr, syscall.EBUSY) {

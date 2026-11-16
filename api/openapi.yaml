@@ -526,6 +526,9 @@ components:
           $ref: '#/components/schemas/Usage'
         termination:
           $ref: '#/components/schemas/Termination'
+        scratch:
+          type: string
+          description: The lease's scratch directory. A child's is kept until its parent ends.
     LeaseList:
       type: object
       properties:

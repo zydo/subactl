@@ -232,7 +232,8 @@ func TestCapacityShrunkRejectsOnly(t *testing.T) {
 
 		began := time.Now()
 		w.external.Store(6 * gib) // capacity 18 < 22 allocated; available 24, well above the reserve
-		e := w.next(telemetry.EventCapacityShrunk, time.Second)
+		// Wait a little past one tick, then check it came within the tick.
+		e := w.next(telemetry.EventCapacityShrunk, 1500*time.Millisecond)
 		if e.Data["reason"] != "allocated_exceeds_capacity" || e.Data["allocated"] != 22*gib || time.Since(began) > time.Second {
 			t.Fatalf("after %v: %+v", time.Since(began), e)
 		}

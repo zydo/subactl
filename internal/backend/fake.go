@@ -3,6 +3,8 @@ package backend
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -18,6 +20,10 @@ type Fake struct {
 	caps    api.Capabilities
 	groups  map[api.LeaseID]*fakeGroup
 	nextPid int
+
+	// ScratchBase, when set, gives every lease a real scratch directory
+	// under it, created with the acgroup.
+	ScratchBase string
 
 	// CreateErr, when set, makes the next Create fail with it.
 	CreateErr error
@@ -102,6 +108,11 @@ func (f *Fake) Create(_ context.Context, lease api.LeaseID, parent ACGroupRef, e
 	}
 	g := &fakeGroup{id: lease, parent: parent.Lease, env: env, children: map[api.LeaseID]bool{}}
 	f.groups[lease] = g
+	if f.ScratchBase != "" {
+		if err := os.MkdirAll(filepath.Join(f.ScratchBase, string(lease)), 0o755); err != nil {
+			return nil, err
+		}
+	}
 	return g, nil
 }
 
@@ -401,4 +412,20 @@ func (f *Fake) OwnUsage(lease api.LeaseID) int64 {
 		return g.mem
 	}
 	return 0
+}
+
+// ScratchDir implements Scratcher. It is empty unless ScratchBase is set.
+func (f *Fake) ScratchDir(lease api.LeaseID) string {
+	if f.ScratchBase == "" {
+		return ""
+	}
+	return filepath.Join(f.ScratchBase, string(lease))
+}
+
+// RemoveScratch implements Scratcher.
+func (f *Fake) RemoveScratch(lease api.LeaseID) error {
+	if f.ScratchBase == "" {
+		return nil
+	}
+	return os.RemoveAll(filepath.Join(f.ScratchBase, string(lease)))
 }

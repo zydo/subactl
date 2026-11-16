@@ -65,6 +65,14 @@ type OutputMeter interface {
 	OutputBytes(ctx context.Context, g ACGroup) (int64, error)
 }
 
+// Scratcher is implemented by backends that give each lease a scratch
+// directory for its output files and results. The directory outlives the
+// acgroup: the daemon removes it when the lease's parent ends.
+type Scratcher interface {
+	ScratchDir(lease api.LeaseID) string
+	RemoveScratch(lease api.LeaseID) error
+}
+
 // ExitStatus is how a main process ended. Signal is zero for a normal exit.
 type ExitStatus struct {
 	Code   int

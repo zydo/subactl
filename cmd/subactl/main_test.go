@@ -262,8 +262,8 @@ func TestStrictHTTP(t *testing.T) {
 		{"POST", "/v1/leases", ``, 400, api.ErrInvalidArgument, ""},
 		{"POST", "/v1/leases", `{"envelope":{"memory":1024}` + uid + `} trailing`, 400, api.ErrInvalidArgument, ""},
 		{"GET", "/v1/leases/ls_nope", ``, 404, api.ErrNotFound, ""},
-		{"GET", "/v1/leases/ls_nope/inbox", ``, 501, api.ErrNotImplemented, ""},
-		{"POST", "/v1/leases/ls_nope/notify", `{}`, 501, api.ErrNotImplemented, ""},
+		{"GET", "/v1/leases/ls_nope/attach", ``, 501, api.ErrNotImplemented, ""},
+		{"POST", "/v1/leases/ls_nope/notify", `{"type":"NEAR_LIMIT"}`, 404, api.ErrNotFound, ""},
 	} {
 		status, e := do(tc.method, tc.path, tc.body)
 		if status != tc.status || e.Code != tc.code || e.Field != tc.field || e.Message == "" {

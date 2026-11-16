@@ -10,11 +10,7 @@ import (
 // the milestone that adds each. An entry must be removed when its method
 // lands, and the test fails if it is not.
 var pending = map[string]string{
-	"attach":         "M4",
-	"requestResize":  "M4",
-	"notify":         "M4",
-	"reportProgress": "M4",
-	"streamInbox":    "M4",
+	"attach": "M4",
 }
 
 func TestClientMatchesContract(t *testing.T) {

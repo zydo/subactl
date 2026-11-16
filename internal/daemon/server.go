@@ -51,11 +51,11 @@ func Routes() []Route {
 		{ID: "kill", Method: "POST", Path: "/v1/leases/{id}/kill", handler: (*Server).kill},
 		{ID: "waitChildren", Method: "POST", Path: "/v1/leases/{id}/wait-children", handler: (*Server).waitChildren},
 		{ID: "attach", Method: "GET", Path: "/v1/leases/{id}/attach", Pending: "M4"},
-		{ID: "requestResize", Method: "POST", Path: "/v1/leases/{id}/resize-request", Pending: "M4"},
-		{ID: "notify", Method: "POST", Path: "/v1/leases/{id}/notify", Pending: "M4"},
-		{ID: "reportProgress", Method: "POST", Path: "/v1/leases/{id}/progress", Pending: "M4"},
+		{ID: "requestResize", Method: "POST", Path: "/v1/leases/{id}/resize-request", handler: (*Server).requestResize},
+		{ID: "notify", Method: "POST", Path: "/v1/leases/{id}/notify", handler: (*Server).notify},
+		{ID: "reportProgress", Method: "POST", Path: "/v1/leases/{id}/progress", handler: (*Server).reportProgress},
 		{ID: "getTrace", Method: "GET", Path: "/v1/leases/{id}/trace", handler: (*Server).getTrace},
-		{ID: "streamInbox", Method: "GET", Path: "/v1/leases/{id}/inbox", Pending: "M4"},
+		{ID: "streamInbox", Method: "GET", Path: "/v1/leases/{id}/inbox", handler: (*Server).streamInbox},
 		{ID: "streamEvents", Method: "GET", Path: "/v1/events", handler: (*Server).streamEvents},
 		{ID: "getMetrics", Method: "GET", Path: "/metrics", handler: (*Server).getMetrics},
 	}
@@ -328,6 +328,80 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request, c Caller) 
 				continue
 			}
 			if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e.Type, data); err != nil {
+				return nil
+			}
+			flusher.Flush()
+		}
+	}
+}
+
+func (s *Server) notify(w http.ResponseWriter, r *http.Request, c Caller) error {
+	var req api.NotifyRequest
+	if err := decode(r, &req, false); err != nil {
+		return err
+	}
+	if err := s.m.Notify(c, leaseID(r), req); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusAccepted)
+	return nil
+}
+
+func (s *Server) reportProgress(w http.ResponseWriter, r *http.Request, c Caller) error {
+	var req api.ProgressRequest
+	if err := decode(r, &req, false); err != nil {
+		return err
+	}
+	if err := s.m.Progress(c, leaseID(r), req); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+func (s *Server) requestResize(w http.ResponseWriter, r *http.Request, c Caller) error {
+	var req api.ResizeAsk
+	if err := decode(r, &req, false); err != nil {
+		return err
+	}
+	if err := s.m.RequestResize(c, leaseID(r), req); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusAccepted)
+	return nil
+}
+
+// streamInbox sends a lease its control messages as server-sent events:
+// the backlog first, then each new message, until the lease ends or the
+// client goes away.
+func (s *Server) streamInbox(w http.ResponseWriter, r *http.Request, c Caller) error {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return apiErr(http.StatusInternalServerError, api.ErrInternal, "this connection cannot stream")
+	}
+	msgs, stop, err := s.m.Inbox(c, leaseID(r))
+	if err != nil {
+		return err
+	}
+	defer stop()
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, ": subscribed\n\n")
+	flusher.Flush()
+	for {
+		select {
+		case <-r.Context().Done():
+			return nil
+		case msg, ok := <-msgs:
+			if !ok {
+				return nil
+			}
+			data, err := json.Marshal(msg)
+			if err != nil {
+				continue
+			}
+			if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", msg.Type, data); err != nil {
 				return nil
 			}
 			flusher.Flush()
