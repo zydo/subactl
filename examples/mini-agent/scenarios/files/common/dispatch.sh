@@ -5,9 +5,9 @@ set -u
 todo=()
 while read -r pkg; do
   [ -n "$pkg" ] || continue
-  [ -f "$RUN_DIR/results/upgrade_$pkg.json" ] || todo+=("upgrade:$pkg")
+  [ -f "$RUN_DIR/results/upgrade_$pkg.d1.json" ] || todo+=("upgrade:$pkg")
 done < <("$TASK_DIR/list.sh" | head -n "${MAX_PACKAGES:-1000}")
-if [ "${G5_RUNAWAY:-0}" = 1 ] && [ ! -f "$RUN_DIR/results/runaway.json" ]; then
+if [ "${G5_RUNAWAY:-0}" = 1 ] && [ ! -f "$RUN_DIR/results/runaway.d1.json" ]; then
   todo+=("runaway")
 fi
 echo "dispatching ${#todo[@]} workers, at most ${FANOUT} at a time"

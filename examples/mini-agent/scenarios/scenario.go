@@ -316,8 +316,10 @@ func (sc *Scenario) Script(task string, depth int) ([]llm.Step, error) {
 			{Say: "Setting up a worktree for " + pkg + ".", Tool: "bash", Input: bash(`"$TASK_DIR/setup.sh"`, step)},
 			{Say: "Type-checking.", Tool: "bash", Input: bash(`"$TASK_DIR/typecheck.sh"`, step)},
 			{Say: "Running the tests.", Tool: "bash", Input: bash(test+` && echo ok > "$WORK/status.test"`, 2*step)},
-			{Say: "Checking the stories in a browser.", Tool: "bash", Input: bash(`"$TASK_DIR/preview.sh"`, step)},
-			{Say: "Wrapping up.", Tool: "bash", Input: bash(`"$TASK_DIR/finish.sh" setup typecheck test preview`, time.Minute)},
+			{Say: "Starting the dev server and a browser.", Tool: "bash", Input: bash(`"$TASK_DIR/preview.sh"`, step)},
+			{Say: "Comparing screenshots of the stories.", Tool: "bash", Input: bash(`"$TASK_DIR/screenshot.sh"`, step)},
+			{Say: "Stopping the dev server and the browser.", Tool: "bash", Input: bash(`"$TASK_DIR/cleanup.sh"`, time.Minute)},
+			{Say: "Wrapping up.", Tool: "bash", Input: bash(`"$TASK_DIR/finish.sh" setup typecheck test preview screenshot`, time.Minute)},
 		}, nil
 	case "fix":
 		if pkg == "" {
