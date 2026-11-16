@@ -7,3 +7,7 @@ depth: 3
 max_packages: 3
 duration: 3m
 fanout_at: 5s
+envelopes:
+  lead: 9G
+  upgrade: 2G
+  fix: 512M

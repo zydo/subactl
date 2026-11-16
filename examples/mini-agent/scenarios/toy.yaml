@@ -15,6 +15,13 @@ interference_ramp: 3s
 interference_for: 10s
 interference_share: 0.3
 output_runaway_at: 20s
+envelopes:
+  lead: 1G
+  upgrade: 128M
+  fix: 64M
+  runaway: 64M
+grow_factor: 1.5
+output_limit: 8M
 greedy:
   leave_servers: true
   output_runaway: true

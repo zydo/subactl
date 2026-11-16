@@ -41,9 +41,10 @@ const (
 	// envWrapped marks a process that subactl started for mini-agent. It is
 	// removed from the environment of the bash tool, so that a mini-agent
 	// started from there wraps itself again, as a child.
-	envWrapped = "MINI_AGENT_WRAPPED"
-	envLease   = "SUBACTL_LEASE_ID" // set by subactl inside a lease
-	envSocket  = "SUBACTL_SOCK"
+	envWrapped  = "MINI_AGENT_WRAPPED"
+	envAdaptive = "MINI_AGENT_ADAPTIVE" // "1" or "0": overrides the scenario's adaptive
+	envLease    = "SUBACTL_LEASE_ID"    // set by subactl inside a lease
+	envSocket   = "SUBACTL_SOCK"
 )
 
 // Exit statuses.
@@ -102,8 +103,15 @@ func run() int {
 	// every lease and as a child of the current lease when it is inside
 	// one. A model that writes "mini-agent --task X &" in bash therefore
 	// still ends up inside the agent tree. Everything below is shared.
+	if v := os.Getenv(envAdaptive); v != "" {
+		sc.Adaptive = v == "1" // the bench runs one scenario file as group B or C
+	}
 	if *mode == "with" && os.Getenv(envWrapped) == "" {
-		return fail(exitFailed, "%v", wrap(sc, self, *task))
+		code, err := wrap(sc, self, *task, depth, agent.Registry{Dir: *runDir})
+		if err != nil {
+			return fail(exitFailed, "%v", err)
+		}
+		return code
 	}
 	abs, err := filepath.Abs(*scenarioPath)
 	if err != nil {
@@ -266,59 +274,96 @@ func run() int {
 		res.Status = "failed"
 	}
 	report(res)
-	if res.Status != "ok" {
+	// Under subactl the verdict travels in the result, and the lease itself
+	// completed: a non-zero exit would read as an abnormal end.
+	if res.Status != "ok" && adapter == nil {
 		return exitFailed
 	}
 	return 0
 }
 
-// wrap replaces this process with "subactl run" or "subactl spawn --wait"
-// running the same mini-agent command. It returns only if that fails.
-func wrap(sc *scenarios.Scenario, self, task string) error {
+// wrap asks subactl to start the same mini-agent command.
+//
+// Outside every lease it becomes "subactl run": the process is replaced,
+// and subactl is the lead's holder. Inside a lease it runs
+// "subactl spawn --wait" and stays as a small waiting process, because two
+// things have to happen around the child: an admission that is refused
+// for lack of room is tried again, and the exit status has to carry the
+// task's verdict so that "tests || mini-agent --task fix" works in bash.
+func wrap(sc *scenarios.Scenario, self, task string, depth int, reg agent.Registry) (int, error) {
 	subactl, err := exec.LookPath("subactl")
 	if err != nil {
 		// Fall back to a subactl installed next to mini-agent.
 		subactl = filepath.Join(filepath.Dir(self), "subactl")
 		if _, serr := os.Stat(subactl); serr != nil {
-			return fmt.Errorf("subactl is not on PATH; mini-agent --mode with needs it (%v)", err)
+			return 0, fmt.Errorf("subactl is not on PATH; mini-agent --mode with needs it (%v)", err)
 		}
 	}
-	inLease := os.Getenv(envLease) != ""
-	kind := "lead"
-	args := []string{"subactl", "run"}
-	if inLease {
-		kind, _, _ = strings.Cut(task, ":")
-		if kind == "" {
-			return errors.New("inside a lease a mini-agent needs --task")
+	env := append(os.Environ(), envWrapped+"=1")
+	if os.Getenv(envLease) == "" {
+		args := []string{"subactl", "run", "--kind", "lead"}
+		if m := sc.Envelopes["lead"]; m > 0 {
+			args = append(args, "--memory", strconv.FormatInt(m, 10))
 		}
-		args = []string{"subactl", "spawn", "--wait"}
+		args = append(append(args, "--", self), os.Args[1:]...)
+		return 0, syscall.Exec(subactl, args, env)
 	}
-	args = append(args, "--kind", kind)
-
-	// The envelope. A static scenario names it per kind. An adaptive one
-	// starts from what subactl suggests from the peaks of earlier agents of
-	// the same kind, and declares how far the limit may grow.
-	memory := sc.Envelopes[kind]
-	if inLease && sc.Adaptive {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		a, err := client.New(os.Getenv(envSocket)).Available(ctx, api.Self, kind)
-		cancel()
-		if s, ok := a.Suggest[kind]; err == nil && ok && !s.Default {
-			memory = s.Memory
+	kind, _, _ := strings.Cut(task, ":")
+	if kind == "" {
+		return 0, errors.New("inside a lease a mini-agent needs --task")
+	}
+	ns, _ := strconv.ParseInt(os.Getenv(envT0), 10, 64)
+	deadline := time.Unix(0, ns).Add(sc.Duration)
+	for attempt := 0; ; attempt++ {
+		// The envelope. A static scenario names it per kind. An adaptive
+		// one starts from what subactl suggests from the peaks of earlier
+		// agents of the same kind, and declares how far the limit may grow.
+		memory := sc.Envelopes[kind]
+		if sc.Adaptive {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			a, err := client.New(os.Getenv(envSocket)).Available(ctx, api.Self, kind)
+			cancel()
+			if s, ok := a.Suggest[kind]; err == nil && ok && !s.Default {
+				memory = s.Memory
+			}
 		}
-	}
-	if inLease && memory == 0 {
-		memory = 1 << 30
-	}
-	if memory > 0 {
-		args = append(args, "--memory", strconv.FormatInt(memory, 10))
-		if inLease && sc.GrowFactor > 1 {
+		if memory == 0 {
+			memory = 1 << 30
+		}
+		args := []string{"spawn", "--wait", "--kind", kind, "--memory", strconv.FormatInt(memory, 10)}
+		if sc.Adaptive && sc.GrowFactor > 1 {
 			args = append(args, "--grow-to", strconv.FormatInt(int64(float64(memory)*sc.GrowFactor), 10))
 		}
+		if sc.OutputLimit > 0 {
+			args = append(args, "--output", strconv.FormatInt(sc.OutputLimit, 10))
+		}
+		args = append(append(args, "--", self), os.Args[1:]...)
+		cmd := exec.Command(subactl, args...)
+		cmd.Env = env
+		var stderr strings.Builder
+		cmd.Stdout, cmd.Stderr = os.Stdout, &stderr
+		runErr := cmd.Run()
+		// subactl exits 1 when the request itself was refused. A refusal
+		// for lack of room is not a failure of the task: the planner asked
+		// for more than fits right now, so wait for room and ask again.
+		var refusal api.Error
+		_ = json.Unmarshal([]byte(stderr.String()), &refusal)
+		if runErr != nil && refusal.Code == api.ErrRejected && time.Now().Before(deadline) {
+			switch refusal.Reason {
+			case api.ReasonParentBudget, api.ReasonMemBudget, api.ReasonCapacityShrunk:
+				time.Sleep(time.Duration(2000+(os.Getpid()+attempt*37)%2000) * time.Millisecond)
+				continue
+			}
+		}
+		fmt.Fprint(os.Stderr, stderr.String())
+		break
 	}
-	if inLease && sc.OutputLimit > 0 {
-		args = append(args, "--output", strconv.FormatInt(sc.OutputLimit, 10))
+	// The verdict is the result the child wrote, not how its lease ended.
+	want := fmt.Sprintf("%s.d%d", task, depth)
+	for _, r := range reg.Results() {
+		if r.Task == want && r.Status == "ok" {
+			return 0, nil
+		}
 	}
-	args = append(append(args, "--", self), os.Args[1:]...)
-	return syscall.Exec(subactl, args, append(os.Environ(), envWrapped+"=1"))
+	return exitFailed, nil
 }

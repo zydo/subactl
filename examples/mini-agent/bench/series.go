@@ -22,24 +22,27 @@ type Sample struct {
 
 // Summary holds the metrics of one run, named as in the design.
 type Summary struct {
-	Group         string   `json:"group"`
-	Run           int      `json:"run"`
-	Scenario      string   `json:"scenario"`
-	ChamberBytes  int64    `json:"chamber_bytes"`
-	MemBasis      string   `json:"mem_basis"`
-	HostPeakWS    float64  `json:"host_peak_ws"`    // GiB
-	HostOOM       int64    `json:"host_oom"`        // OOM kills in the chamber
-	Meltdown      bool     `json:"meltdown"`        // the chamber stopped responding and was killed
-	OrphansAfter  int      `json:"orphans_after"`   // processes left 60s after the end
-	LeakedWSAfter float64  `json:"leaked_ws_after"` // GiB held by those processes
-	Completion    float64  `json:"completion"`      // share of packages upgraded
-	Packages      int      `json:"packages"`
-	WorkLost      int      `json:"work_lost"` // subtasks killed and redone
-	UtilMean      float64  `json:"util_mean"` // mean agent working set / chamber size
-	SafetyNet     int      `json:"safety_net_count"`
-	Makespan      float64  `json:"makespan"` // minutes
-	LeadExit      int      `json:"lead_exit"`
-	OrphanSample  []string `json:"orphan_sample,omitempty"` // a few command lines
+	Group         string  `json:"group"`
+	Run           int     `json:"run"`
+	Scenario      string  `json:"scenario"`
+	ChamberBytes  int64   `json:"chamber_bytes"`
+	MemBasis      string  `json:"mem_basis"`
+	HostPeakWS    float64 `json:"host_peak_ws"`    // GiB
+	HostOOM       int64   `json:"host_oom"`        // OOM kills in the chamber
+	Meltdown      bool    `json:"meltdown"`        // the chamber stopped responding and was killed
+	OrphansAfter  int     `json:"orphans_after"`   // processes left 60s after the end
+	LeakedWSAfter float64 `json:"leaked_ws_after"` // GiB held by those processes
+	Completion    float64 `json:"completion"`      // share of packages upgraded
+	Packages      int     `json:"packages"`
+	WorkLost      int     `json:"work_lost"` // subtasks killed and redone
+	UtilMean      float64 `json:"util_mean"` // mean agent working set / chamber size
+	SafetyNet     int     `json:"safety_net_count"`
+	Makespan      float64 `json:"makespan"` // minutes
+	LeadExit      int     `json:"lead_exit"`
+	// Codes counts the leases that ended in this run by termination code
+	// (groups B and C).
+	Codes        map[string]int `json:"codes,omitempty"`
+	OrphanSample []string       `json:"orphan_sample,omitempty"` // a few command lines
 }
 
 const gib = float64(1 << 30)

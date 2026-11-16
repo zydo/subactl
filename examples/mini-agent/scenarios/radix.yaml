@@ -15,6 +15,16 @@ interference_ramp: 30s
 interference_for: 4m
 interference_share: 0.3
 output_runaway_at: 9m  # G5
+# Under subactl (groups B and C). Group B uses these limits as they are.
+# Group C starts each worker from what subactl suggests for its kind once
+# there is history, and lets it grow by half on NEAR_LIMIT.
+envelopes:
+  lead: 9G
+  upgrade: 2G
+  fix: 512M
+  runaway: 256M
+grow_factor: 1.5
+output_limit: 64M
 greedy:
   leave_servers: true       # G2: dev servers and browsers are never stopped
   output_runaway: true      # G5: one worker writes output without end

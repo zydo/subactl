@@ -21,6 +21,15 @@ type Options struct {
 	ChamberBytes int64
 	UID, GID     int    // the lead never runs as root
 	Home         string // HOME of that user
-	Settle       time.Duration
-	Log          func(format string, a ...any)
+	// With subactl (groups B and C): where subactld and subactl are, the
+	// reserve line inside the chamber, the daemon's state directory, the
+	// group that may use its socket, and whether workers size themselves
+	// from history.
+	BinDir      string
+	Reserve     int64
+	StateDir    string
+	SocketGroup string
+	Adaptive    bool
+	Settle      time.Duration
+	Log         func(format string, a ...any)
 }

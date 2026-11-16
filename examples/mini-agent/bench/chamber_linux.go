@@ -91,7 +91,7 @@ func newChamber(base, name string, bytes int64) (*chamber, error) {
 	if err := enable(c.dir); err != nil {
 		return nil, err
 	}
-	for _, leaf := range []string{"agents", "external", "probe"} {
+	for _, leaf := range []string{"agents", "external", "probe", "holder"} {
 		if err := os.Mkdir(filepath.Join(c.dir, leaf), 0o755); err != nil {
 			return nil, err
 		}
@@ -146,11 +146,11 @@ func workingSet(dir string) int64 {
 	return max(readInt(filepath.Join(dir, "memory.current"))-stat(filepath.Join(dir, "memory.stat"), "inactive_file"), 0)
 }
 
-func (c *chamber) sample(t time.Duration) Sample {
+func (c *chamber) sample(t time.Duration, agents string) Sample {
 	return Sample{
 		T:        t.Seconds(),
 		WS:       workingSet(c.dir),
-		AgentsWS: workingSet(filepath.Join(c.dir, "agents")),
+		AgentsWS: workingSet(filepath.Join(c.dir, agents)),
 		Pids:     readInt(filepath.Join(c.dir, "pids.current")),
 		OOMKills: stat(filepath.Join(c.dir, "memory.events"), "oom_kill"),
 	}
@@ -196,6 +196,35 @@ func (c *chamber) destroy() error {
 		}
 	}
 	return last
+}
+
+// terminationCodes counts, from subactld's audit log, the leases that
+// ended since a given time, by code.
+func terminationCodes(dir string, since time.Time) map[string]int {
+	out := map[string]int{}
+	files, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+	for _, name := range files {
+		f, err := os.Open(name)
+		if err != nil {
+			continue
+		}
+		sc := bufio.NewScanner(f)
+		sc.Buffer(make([]byte, 0, 64<<10), 4<<20)
+		for sc.Scan() {
+			var r struct {
+				At          time.Time `json:"at"`
+				Type        string    `json:"type"`
+				Termination *struct {
+					Code int `json:"code"`
+				} `json:"termination"`
+			}
+			if json.Unmarshal(sc.Bytes(), &r) == nil && r.Type == "terminate" && r.Termination != nil && !r.At.Before(since) {
+				out[strconv.Itoa(r.Termination.Code)]++
+			}
+		}
+		f.Close()
+	}
+	return out
 }
 
 func fileExists(path string) bool {
@@ -249,12 +278,54 @@ func Run(o Options) (*Summary, error) {
 
 	cred := &syscall.Credential{Uid: uint32(o.UID), Gid: uint32(o.GID)}
 	env := append(os.Environ(), "SUBACTL_EXPERIMENT="+name, "HOME="+o.Home)
+	// Without subactl the lead and everything it starts live in one leaf.
+	// With it, subactld owns a base cgroup inside the chamber and takes the
+	// chamber for the machine; only the lead's holder sits outside the base.
+	agents, leadLeaf := "agents", "agents"
+	var stopDaemon func()
+	if o.Mode == "with" {
+		agents, leadLeaf = "subactl", "holder"
+		sock := filepath.Join(o.OutDir, "subactl.sock")
+		dlog, err := os.Create(filepath.Join(o.OutDir, "subactld.log"))
+		if err != nil {
+			return nil, err
+		}
+		defer dlog.Close()
+		daemon := exec.Command(filepath.Join(o.BinDir, "subactld"),
+			"--socket", sock, "--socket-group", o.SocketGroup,
+			"--cgroup", filepath.Join(ch.dir, agents), "--capacity-cgroup", ch.dir,
+			"--reserve", strconv.FormatInt(o.Reserve, 10), "--state", o.StateDir)
+		daemon.Stdout, daemon.Stderr = dlog, dlog
+		if err := daemon.Start(); err != nil {
+			return nil, fmt.Errorf("start subactld: %w", err)
+		}
+		// Stopping the daemon reaps every lease; the chamber is removed after.
+		stopDaemon = sync.OnceFunc(func() {
+			_ = daemon.Process.Signal(syscall.SIGTERM)
+			_ = daemon.Wait()
+		})
+		defer stopDaemon()
+		for i := 0; ; i++ {
+			if _, err := os.Stat(sock); err == nil {
+				break
+			}
+			if i > 100 {
+				return nil, fmt.Errorf("subactld did not come up; see %s", dlog.Name())
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		adaptive := "0"
+		if o.Adaptive {
+			adaptive = "1"
+		}
+		env = append(env, "SUBACTL_SOCK="+sock, "MINI_AGENT_ADAPTIVE="+adaptive, "PATH="+o.BinDir+":"+os.Getenv("PATH"))
+	}
 	lead := exec.Command(o.MiniAgent, "--mode", o.Mode, "--scenario", o.ScenarioPath, "--run-dir", runDir)
 	lead.Dir, lead.Env = o.WorkDir, env
 	lead.Stdout, lead.Stderr = leadLog, leadLog
 	lead.SysProcAttr = &syscall.SysProcAttr{Credential: cred, Setsid: true}
 	start := time.Now()
-	if err := ch.start("agents", lead); err != nil {
+	if err := ch.start(leadLeaf, lead); err != nil {
 		return nil, fmt.Errorf("start the lead: %w", err)
 	}
 	o.Log("%s run %d: lead started (pid %d) in %s, capped at %.1fGiB", o.Group, o.RunIndex, lead.Process.Pid, ch.dir, float64(o.ChamberBytes)/gib)
@@ -271,7 +342,7 @@ func Run(o Options) (*Summary, error) {
 		tick := time.NewTicker(time.Second)
 		defer tick.Stop()
 		for {
-			series.Add(ch.sample(time.Since(start)))
+			series.Add(ch.sample(time.Since(start), agents))
 			select {
 			case <-ctx.Done():
 				return
@@ -353,9 +424,9 @@ func Run(o Options) (*Summary, error) {
 
 	// What is still running after the settle time was left behind.
 	time.Sleep(o.Settle)
-	left := ch.pids("agents")
+	left := ch.pids(agents)
 	sum.OrphansAfter = len(left)
-	sum.LeakedWSAfter = float64(workingSet(filepath.Join(ch.dir, "agents"))) / gib
+	sum.LeakedWSAfter = float64(workingSet(filepath.Join(ch.dir, agents))) / gib
 	for i, pid := range left {
 		if i == 8 {
 			break
@@ -388,6 +459,16 @@ func Run(o Options) (*Summary, error) {
 	for _, l := range logs {
 		data, _ := os.ReadFile(l)
 		sum.WorkLost += strings.Count(string(data), "usage limit: killed subagent")
+	}
+
+	// What subactld recorded: how each lease of this run ended. A lease
+	// ended by its own limit (413) or by the safety net (503) is work that
+	// has to be done again.
+	if stopDaemon != nil {
+		stopDaemon() // flushes the audit log
+		sum.Codes = terminationCodes(filepath.Join(o.StateDir, "audit"), start)
+		sum.SafetyNet = sum.Codes["503"]
+		sum.WorkLost += sum.Codes["413"] + sum.Codes["503"]
 	}
 
 	// The task may have things to clean up outside the run directory. Its

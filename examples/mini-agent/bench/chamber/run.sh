@@ -40,5 +40,6 @@ docker run --rm --privileged \
     for r in run-*; do
       mkdir -p "/host/$r"
       cp "$r/summary.json" "$r/series.jsonl" "$r/lead.log" "/host/$r/"
+      [ -f "$r/subactld.log" ] && cp "$r/subactld.log" "/host/$r/"
     done'
 echo "results are in $out"
