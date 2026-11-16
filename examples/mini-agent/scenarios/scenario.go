@@ -78,6 +78,12 @@ type Scenario struct {
 	Env map[string]string
 }
 
+// Blank is the scenario of a run that follows no script: a real brain
+// decides what to do, and there is no timetable and no task definition.
+func Blank() *Scenario {
+	return &Scenario{Fanout: 4, Depth: 3, Duration: 24 * time.Hour, UnboundedShare: 1, Env: map[string]string{}, Envelopes: map[string]int64{}}
+}
+
 // Load reads a scenario file.
 func Load(path string) (*Scenario, error) {
 	data, err := os.ReadFile(path)
@@ -274,6 +280,9 @@ func (d *decoder) finish() []string {
 // Extract writes the task's shell files (and the common ones) into dir and
 // returns it. Agents run them from there.
 func (sc *Scenario) Extract(dir string) error {
+	if sc.Task == "" {
+		return nil // no script, no task files
+	}
 	for _, src := range []string{"files/common", "files/" + sc.Task} {
 		entries, err := files.ReadDir(src)
 		if err != nil {

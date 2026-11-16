@@ -4,11 +4,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"os"
 	"os/exec"
@@ -44,6 +46,9 @@ const (
 	// started from there wraps itself again, as a child.
 	envWrapped  = "MINI_AGENT_WRAPPED"
 	envAdaptive = "MINI_AGENT_ADAPTIVE" // "1" or "0": overrides the scenario's adaptive
+	envBrain    = "MINI_AGENT_BRAIN"    // scripted or real; children use their parent's
+	envProvider = "MINI_AGENT_PROVIDER" // endpoint of the real brain
+	envModel    = "MINI_AGENT_MODEL"    // model of the real brain
 	envLease    = "SUBACTL_LEASE_ID"    // set by subactl inside a lease
 	envSocket   = "SUBACTL_SOCK"
 )
@@ -69,7 +74,10 @@ func run() int {
 	scenarioPath := flag.String("scenario", os.Getenv(envScenario), "scenario file for the scripted brain")
 	mode := flag.String("mode", envOr(envMode, "with"), "\"with\" runs under subactl; \"without\" starts children as plain processes")
 	runDir := flag.String("run-dir", os.Getenv(envRun), "run directory (default: a new temporary directory)")
-	brainName := flag.String("brain", "scripted", "scripted or real")
+	brainName := flag.String("brain", envOr(envBrain, "scripted"), "scripted or real")
+	providerName := flag.String("provider", envOr(envProvider, "anthropic"), "endpoint of the real brain: anthropic, deepseek or zai")
+	model := flag.String("model", os.Getenv(envModel), "model of the real brain (default: the provider's)")
+	prompt := flag.String("prompt", "", "what the lead should do, with the real brain (default: read it from the terminal)")
 	flag.Parse()
 	fail := func(code int, format string, a ...any) int {
 		fmt.Fprintf(os.Stderr, "mini-agent: "+format+"\n", a...)
@@ -79,15 +87,32 @@ func run() int {
 	if *mode != "with" && *mode != "without" {
 		return fail(exitUsage, "unknown mode %q: want with or without", *mode)
 	}
-	if *brainName != "scripted" {
-		return fail(exitUsage, "the %s brain lands in milestone M5; use --brain scripted", *brainName)
+	real := *brainName == "real"
+	if !real && *brainName != "scripted" {
+		return fail(exitUsage, "unknown brain %q: want scripted or real", *brainName)
 	}
-	if *scenarioPath == "" {
+	var provider llm.Provider
+	if real {
+		for _, p := range llm.Providers {
+			if p.Name == *providerName {
+				provider = p
+			}
+		}
+		if provider.Name == "" {
+			return fail(exitUsage, "unknown provider %q: want anthropic, deepseek or zai", *providerName)
+		}
+		if os.Getenv(provider.KeyEnv) == "" {
+			return fail(exitUsage, "the %s provider reads its key from %s, which is not set", provider.Name, provider.KeyEnv)
+		}
+	} else if *scenarioPath == "" {
 		return fail(exitUsage, "the scripted brain needs --scenario FILE")
 	}
-	sc, err := scenarios.Load(*scenarioPath)
-	if err != nil {
-		return fail(exitUsage, "%v", err)
+	sc := scenarios.Blank()
+	var err error
+	if *scenarioPath != "" {
+		if sc, err = scenarios.Load(*scenarioPath); err != nil {
+			return fail(exitUsage, "%v", err)
+		}
 	}
 	depth, _ := strconv.Atoi(os.Getenv(envDepth))
 	parent, _ := strconv.Atoi(os.Getenv(envParent))
@@ -114,9 +139,11 @@ func run() int {
 		}
 		return code
 	}
-	abs, err := filepath.Abs(*scenarioPath)
-	if err != nil {
-		return fail(exitFailed, "%v", err)
+	abs := ""
+	if *scenarioPath != "" {
+		if abs, err = filepath.Abs(*scenarioPath); err != nil {
+			return fail(exitFailed, "%v", err)
+		}
 	}
 
 	// The lead creates the run; children find it in their environment.
@@ -142,7 +169,7 @@ func run() int {
 	pid := os.Getpid()
 	// Fixers at different depths share a task name, so the depth is part of
 	// the scratch directory's name.
-	label := *task
+	label := labelOf(*task)
 	if lead {
 		label = "lead"
 	}
@@ -153,13 +180,18 @@ func run() int {
 	defer reg.Unregister(pid)
 	work := reg.WorkDir(workName)
 
-	steps, err := sc.Script(*task, depth)
-	if err != nil {
-		return fail(exitUsage, "%v", err)
-	}
-	brain := &llm.Scripted{
-		Steps: steps, Clock: clock,
-		QuotaAt: sc.QuotaAt, QuotaFor: sc.QuotaFor, LeakBytes: int64(sc.LeakMB) << 20,
+	var brain llm.Brain
+	if real {
+		brain = llm.NewMessages(provider, *model, os.Getenv(provider.KeyEnv))
+	} else {
+		steps, err := sc.Script(*task, depth)
+		if err != nil {
+			return fail(exitUsage, "%v", err)
+		}
+		brain = &llm.Scripted{
+			Steps: steps, Clock: clock,
+			QuotaAt: sc.QuotaAt, QuotaFor: sc.QuotaFor, LeakBytes: int64(sc.LeakMB) << 20,
+		}
 	}
 
 	// The inherited environment first, then this agent's own task values,
@@ -178,6 +210,9 @@ func run() int {
 		fmt.Sprint(envParent, "=", pid),
 		envScenario+"="+abs,
 		envMode+"="+*mode,
+		envBrain+"="+*brainName,
+		envProvider+"="+*providerName,
+		envModel+"="+*model,
 		envRunID+"="+envOr(envRunID, filepath.Base(*runDir)),
 		"RUN_ID="+envOr(envRunID, filepath.Base(*runDir)),
 		"RUN_DIR="+*runDir,
@@ -230,7 +265,7 @@ func run() int {
 	a := &agent.Agent{
 		Brain:   brain,
 		Tools:   tools.All(tools.Config{Dir: cwd, SpillDir: work, Env: env, Mirror: mirror}),
-		System:  "You are mini-agent. Tools: read, write, edit, bash.",
+		System:  systemPrompt,
 		OnEvent: printer.Event,
 		OnQuota: func(context.Context) (time.Duration, bool) {
 			killSubagents()
@@ -243,7 +278,29 @@ func run() int {
 	if adapter != nil {
 		adapter.Attach(ctx, a, api.LeaseID(os.Getenv(envLease)))
 	}
-	err = a.Run(ctx, "Carry out the task: "+label)
+	switch {
+	case !real:
+		err = a.Run(ctx, "Carry out the task: "+label)
+	case !lead:
+		err = a.Run(ctx, *task)
+	case *prompt != "" || flag.NArg() > 0:
+		err = a.Run(ctx, strings.TrimSpace(*prompt+" "+strings.Join(flag.Args(), " ")))
+	default:
+		// The line-mode terminal: one line in, the agent's turn out.
+		in := bufio.NewScanner(os.Stdin)
+		for err == nil {
+			if adapter != nil {
+				adapter.AwaitingInput(ctx)
+			}
+			fmt.Print("> ")
+			if !in.Scan() {
+				break
+			}
+			if line := strings.TrimSpace(in.Text()); line != "" {
+				err = a.Run(ctx, line)
+			}
+		}
+	}
 	// Under subactl the outcome is also handed up through it: a result file
 	// in the lease's scratch directory and a "done" beacon.
 	report := func(res agent.Result) {
@@ -263,6 +320,12 @@ func run() int {
 		// the planner sees the task as lost and dispatches it again.
 		printer.Line("giving up: " + err.Error())
 		return exitQuota
+	case errors.Is(err, llm.ErrContextOverflow):
+		// No compaction: the worker gives up and says why, and its planner
+		// decides whether to split the task.
+		printer.Line("giving up: " + err.Error())
+		report(agent.Result{Task: workName, Status: "failed", Detail: "context_overflow"})
+		return exitFailed
 	case errors.Is(err, context.Canceled):
 		return 130
 	case err != nil:
@@ -316,9 +379,14 @@ func wrap(sc *scenarios.Scenario, self, task string, depth int, reg agent.Regist
 		args = append(append(args, "--", self), os.Args[1:]...)
 		return 0, syscall.Exec(subactl, args, env)
 	}
-	kind, _, _ := strings.Cut(task, ":")
-	if kind == "" {
+	if task == "" {
 		return 0, errors.New("inside a lease a mini-agent needs --task")
+	}
+	// A scripted task is "kind:package". A real brain's task is free text,
+	// and its children are all workers.
+	kind, _, scripted := strings.Cut(task, ":")
+	if !scripted || strings.ContainsAny(kind, " \t") {
+		kind = "worker"
 	}
 	ns, _ := strconv.ParseInt(os.Getenv(envT0), 10, 64)
 	deadline := time.Unix(0, ns).Add(sc.Duration)
@@ -367,7 +435,7 @@ func wrap(sc *scenarios.Scenario, self, task string, depth int, reg agent.Regist
 		break
 	}
 	// The verdict is the result the child wrote, not how its lease ended.
-	want := fmt.Sprintf("%s.d%d", task, depth)
+	want := fmt.Sprintf("%s.d%d", labelOf(task), depth)
 	for _, r := range reg.Results() {
 		if r.Task == want && r.Status == "ok" {
 			return 0, nil
@@ -375,3 +443,36 @@ func wrap(sc *scenarios.Scenario, self, task string, depth int, reg agent.Regist
 	}
 	return exitFailed, nil
 }
+
+// labelOf names a task in logs and files. A scripted task is its own
+// label; free text from a real brain is shortened to a few words and a
+// hash, so that it is unique and safe in a file name.
+func labelOf(task string) string {
+	if len(task) <= 40 && !strings.ContainsAny(task, " \n\t/") {
+		return task
+	}
+	h := fnv.New32a()
+	h.Write([]byte(task))
+	words := strings.Fields(task)
+	if len(words) > 3 {
+		words = words[:3]
+	}
+	return agent.TaskFile(strings.Join(words, "-")) + fmt.Sprintf("-%08x", h.Sum32())
+}
+
+// systemPrompt is all the model is told about its harness.
+const systemPrompt = `You are mini-agent, a coding agent working in a shell on the user's machine.
+
+You have four tools: read, write, edit and bash. Use bash for everything else: running tests, searching, git.
+
+To delegate a self-contained piece of work, start a child agent from bash:
+
+    mini-agent --task "what the child should do, with every detail it needs"
+
+The call blocks until the child is done and exits 0 if it succeeded. The child shares nothing with you but the file system, so describe the task fully and tell it where to write its results. Run several children at once with "&" and "wait" when the pieces are independent.
+
+When this runs under subactl, every agent has a hard memory limit and its children's limits come out of its own. "subactl available" shows what you can still hand out; "subactl ls" shows your children. If a child ends with code 413 it needed more memory than it was given: give the next attempt more, or a smaller task. Stop what you start: dev servers and browsers left running count against your limit.
+
+If you receive a message marked "[subactl control message ...] TERMINATE_REQUESTED", save your progress, end your children and stop.
+
+Be brief. When the task is done, say what you did and what is left.`

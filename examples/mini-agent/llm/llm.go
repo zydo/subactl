@@ -33,6 +33,14 @@ type Block struct {
 type Message struct {
 	Role   string  `json:"role"`
 	Blocks []Block `json:"content"`
+	// Raw is the provider's own form of an assistant turn's content, when
+	// the brain has one. It is sent back as it came, because a provider may
+	// require blocks it produced (reasoning blocks with their signatures)
+	// to be replayed unchanged.
+	Raw []json.RawMessage `json:"-"`
+	// Tokens is what the provider reported for producing this message:
+	// input plus output. It is self-reported data, not a measurement.
+	Tokens int64 `json:"-"`
 }
 
 // ToolCalls returns the tool_use blocks of a message.
@@ -70,6 +78,8 @@ var (
 	// ErrQuota means the account's usage limit was reached. It is the
 	// external abort of the design: nothing is wrong with the task.
 	ErrQuota = errors.New("llm: usage limit reached")
+	// ErrRefused means the provider declined to answer on policy grounds.
+	ErrRefused = errors.New("llm: the provider declined the request")
 	// ErrContextOverflow means the conversation no longer fits the model's
 	// context window. mini-agent does not compact; the worker gives up.
 	ErrContextOverflow = errors.New("llm: context window exceeded")
