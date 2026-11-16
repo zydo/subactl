@@ -26,6 +26,8 @@ import (
 	"github.com/zydo/subactl/api"
 	"github.com/zydo/subactl/internal/backend"
 	"github.com/zydo/subactl/internal/backend/cgroup2"
+	"github.com/zydo/subactl/internal/capacity"
+	"github.com/zydo/subactl/internal/telemetry"
 )
 
 const mib = int64(1) << 20
@@ -76,6 +78,12 @@ func prepareRoot(t *testing.T) {
 }
 
 type env struct {
+	// outer, when set, is a capped cgroup that stands in for the machine:
+	// the leases live under it and capacity is read from it.
+	outer   string
+	reserve int64
+	window  time.Duration
+
 	t    *testing.T
 	m    *Manager
 	be   *cgroup2.Backend
@@ -85,7 +93,11 @@ type env struct {
 	stop context.CancelFunc
 }
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { return newEnvIn(t, 0, 0) }
+
+// newEnvIn builds the environment inside an outer cgroup capped at total
+// bytes, with the given reserve line, when total is not zero.
+func newEnvIn(t *testing.T, total, reserve int64) *env {
 	t.Helper()
 	if os.Geteuid() != 0 {
 		t.Skip("integration tests need root")
@@ -93,6 +105,26 @@ func newEnv(t *testing.T) *env {
 	uid := agentUID(t)
 	prepareRoot(t)
 	e := &env{t: t, uid: uid, base: fmt.Sprintf("/sys/fs/cgroup/subactl-test-%d-%d", os.Getpid(), time.Now().UnixNano()%1e6)}
+	if total > 0 {
+		e.outer, e.reserve, e.window = e.base, reserve, 2*time.Second
+		e.base = filepath.Join(e.outer, "leases")
+		for _, d := range []string{e.outer, filepath.Join(e.outer, "external")} {
+			if err := os.Mkdir(d, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for name, v := range map[string]string{"memory.max": strconv.FormatInt(total, 10), "memory.swap.max": "0", "cgroup.subtree_control": "+memory +pids"} {
+			if err := os.WriteFile(filepath.Join(e.outer, name), []byte(v), 0o644); err != nil && name != "memory.swap.max" {
+				t.Fatal(err)
+			}
+		}
+		t.Cleanup(func() {
+			_ = os.WriteFile(filepath.Join(e.outer, "cgroup.kill"), []byte("1"), 0o644)
+			time.Sleep(100 * time.Millisecond)
+			_ = os.Remove(filepath.Join(e.outer, "external"))
+			_ = os.Remove(e.outer)
+		})
+	}
 	e.op = Caller{UID: uid}
 	e.start()
 	t.Cleanup(func() {
@@ -121,7 +153,11 @@ func (e *env) start() {
 		e.t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	m, err := NewManager(ctx, Config{Backend: be, Capacity: 4 << 30, EscapeScan: 500 * time.Millisecond, TermWait: time.Second})
+	cfg := Config{Backend: be, Capacity: 4 << 30, EscapeScan: 500 * time.Millisecond, TermWait: time.Second}
+	if e.outer != "" {
+		cfg.Capacity, cfg.Host, cfg.Reserve, cfg.SafetyWindow = 0, capacity.CgroupReader{Dir: e.outer}, e.reserve, e.window
+	}
+	m, err := NewManager(ctx, cfg)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -555,5 +591,179 @@ func TestIntegrationF11OutputAndWall(t *testing.T) {
 	}
 	if took := time.Since(began); took < 2*time.Second || took > 4*time.Second {
 		t.Fatalf("the wall limit of 2s fired after %v", took)
+	}
+}
+
+// hold is a process that allocates n bytes at once, touches them and keeps
+// them. It notes the time of the allocation in its scratch directory.
+func hold(n int64) string {
+	return fmt.Sprintf(`exec node -e 'const b=Buffer.alloc(%d,1); require("fs").writeFileSync(process.env.SUBACTL_SCRATCH+"/held", String(Date.now())); setInterval(()=>b[0],1000)'`, n)
+}
+
+func needNode(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("this test uses node to hold a known amount of memory")
+	}
+}
+
+// rssOf sums the resident memory of the processes in a cgroup subtree, as
+// the kernel reports it per process: an independent view of the same use.
+func rssOf(t *testing.T, dir string) int64 {
+	t.Helper()
+	var total int64
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.Name() != "cgroup.procs" {
+			return nil
+		}
+		data, _ := os.ReadFile(path)
+		for _, pid := range strings.Fields(string(data)) {
+			status, _ := os.ReadFile("/proc/" + pid + "/status")
+			for _, line := range strings.Split(string(status), "\n") {
+				if f := strings.Fields(line); len(f) >= 2 && f[0] == "VmRSS:" {
+					kb, _ := strconv.ParseInt(f[1], 10, 64)
+					total += kb << 10
+				}
+			}
+		}
+		return nil
+	})
+	return total
+}
+
+// F9: usage agrees with the kernel's own per-process accounting to within
+// 10%, and a sample is never older than two seconds.
+func TestIntegrationF9Accuracy(t *testing.T) {
+	needNode(t)
+	e := newEnv(t)
+	id := e.run(e.op, 512*mib, hold(256*mib))
+	dir := filepath.Join(e.base, string(id))
+	eventually(t, 10*time.Second, "the process holds its memory", func() bool { return rssOf(t, dir) > 256*mib })
+	time.Sleep(1500 * time.Millisecond) // let a sample be taken after the allocation
+	tr, err := e.m.Trace(e.op, id)
+	if err != nil || len(tr.Samples) == 0 {
+		t.Fatalf("trace: %+v, %v", tr, err)
+	}
+	last := tr.Samples[len(tr.Samples)-1]
+	if age := time.Since(last.SampledAt); age > 2*time.Second {
+		t.Fatalf("the latest sample is %v old", age)
+	}
+	rss := rssOf(t, dir)
+	diff := float64(last.Memory-rss) / float64(rss)
+	t.Logf("working_set %d, sum of VmRSS %d, difference %+.1f%%", last.Memory, rss, 100*diff)
+	if last.MemBasis != api.BasisWorkingSet || diff > 0.10 || diff < -0.10 {
+		t.Fatalf("usage %d differs from the kernel's %d by %.1f%%", last.Memory, rss, 100*diff)
+	}
+}
+
+// F7: NEAR_LIMIT arrives within two seconds of usage passing 90% of the
+// hard limit, and nothing is terminated for it.
+func TestIntegrationF7NearLimit(t *testing.T) {
+	needNode(t)
+	e := newEnv(t)
+	events, stop := e.m.Events(e.op)
+	defer stop()
+	// 262MiB plus about 14MiB for the runtime itself, against 300MiB:
+	// above 90%, below 100%.
+	id := e.run(e.op, 300*mib, "sleep 1; "+hold(262*mib))
+	var held time.Time
+	eventually(t, 10*time.Second, "the process allocated", func() bool {
+		data, err := os.ReadFile(filepath.Join(e.be.ScratchDir(id), "held"))
+		ms, _ := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
+		held = time.UnixMilli(ms)
+		return err == nil && ms > 0
+	})
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case ev := <-events:
+			if ev.Type != telemetry.EventNearLimit {
+				continue
+			}
+			delay := ev.At.Sub(held)
+			t.Logf("NEAR_LIMIT %v after the allocation: %v", delay.Round(time.Millisecond), ev.Data)
+			if ev.Lease != id || delay > 2*time.Second {
+				t.Fatalf("NEAR_LIMIT for %s came %v after the allocation", ev.Lease, delay)
+			}
+			if ls, _ := e.m.Get(context.Background(), e.op, id); ls.State != api.StateRunning {
+				t.Fatalf("the lease was terminated: %+v", ls)
+			}
+			return
+		case <-deadline:
+			t.Fatal("no NEAR_LIMIT within 5s of the allocation")
+		}
+	}
+}
+
+// F8 on real memory. A 640MiB cgroup stands in for the machine, with a
+// 160MiB reserve line. An external process grows until available memory is
+// below the line. Nothing happens to the leases while only the capacity
+// has shrunk; once memory is really short, the planner is warned, and
+// after the window exactly one lease, the largest leaf, is ended with 503.
+func TestIntegrationF8SafetyNet(t *testing.T) {
+	needNode(t)
+	e := newEnvIn(t, 640*mib, 160*mib)
+	events, stop := e.m.Events(e.op)
+	defer stop()
+	lead := e.run(e.op, 400*mib, "exec sleep 600")
+	small := e.run(node(lead), 140*mib, hold(40*mib))
+	large := e.run(node(lead), 240*mib, hold(130*mib))
+	time.Sleep(3 * time.Second)
+	if h := e.m.Host(); h.MemTotal != 640*mib || h.EffectiveCapacity < 400*mib {
+		t.Fatalf("host %+v", h)
+	}
+
+	// The external load: a process in the outer cgroup, outside every lease.
+	// The leases use about 200MiB; with 310MiB more, about 130MiB is left.
+	external := exec.Command("/bin/sh", "-c", hold(296*mib))
+	external.Env = []string{"PATH=/usr/local/bin:/usr/bin:/bin", "SUBACTL_SCRATCH=/tmp"}
+	leaf, err := os.Open(filepath.Join(e.outer, "external"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer leaf.Close()
+	external.SysProcAttr = &syscall.SysProcAttr{UseCgroupFD: true, CgroupFD: int(leaf.Fd())}
+	began := time.Now()
+	if err := external.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer external.Process.Kill()
+
+	var warned time.Time
+	var ended []api.Event
+	deadline := time.After(40 * time.Second)
+	for done := false; !done; {
+		select {
+		case ev := <-events:
+			switch {
+			case ev.Type == telemetry.EventCapacityShrunk && ev.Data["reason"] == "below_reserve":
+				warned = ev.At
+				t.Logf("warned %v after the load began: %v", ev.At.Sub(began).Round(time.Millisecond), ev.Data)
+			case ev.Type == telemetry.EventTerminated:
+				ended = append(ended, ev)
+				t.Logf("terminated %s (%v) %v after the warning", ev.Lease, ev.Data["code"], ev.At.Sub(warned).Round(time.Millisecond))
+				// Watch a while longer: nothing more may be terminated.
+				deadline = time.After(12 * time.Second)
+			}
+		case <-deadline:
+			done = true
+		}
+	}
+	if warned.IsZero() {
+		t.Fatal("no warning that memory is below the reserve line")
+	}
+	if len(ended) != 1 || ended[0].Lease != large || ended[0].Data["code"] != float64(api.CodeSafetyNet) {
+		t.Fatalf("want exactly the largest leaf (%s) ended with 503, got %+v", large, ended)
+	}
+	if d := ended[0].At.Sub(warned); d < e.window || d > e.window+3*time.Second {
+		t.Fatalf("the termination came %v after the warning; the window is %v", d, e.window)
+	}
+	for _, id := range []api.LeaseID{lead, small} {
+		if ls, _ := e.m.Get(context.Background(), e.op, id); ls.State != api.StateRunning {
+			t.Fatalf("%s was ended too: %+v", id, ls)
+		}
+	}
+	if h, _ := (capacity.CgroupReader{Dir: e.outer}).Read(); h.Available < 160*mib {
+		t.Fatalf("available memory is still below the line: %d", h.Available)
 	}
 }

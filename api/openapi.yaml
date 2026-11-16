@@ -105,6 +105,13 @@ paths:
     get:
       operationId: getAvailable
       summary: Remaining budget of this node's subtree and suggested quotas.
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          description: A kind to include in the suggestions even without history. May be repeated.
+          schema:
+            type: string
       responses:
         '200':
           description: Remaining budget.

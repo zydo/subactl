@@ -32,6 +32,11 @@ const usage = `usage: subactl [--socket PATH] <command> [flags] [-- command...]
   terminate LEASE [flags]      graceful: wait, SIGTERM, then kill the whole tree
   kill LEASE                   kill the whole tree at once (499)
   wait-children [LEASE]        wait for the subtree to end (default: own lease)
+  suggest KIND [--lease LEASE] suggested memory for a kind, in bytes: p95 of past peaks x 1.2
+  trace LEASE                  timeline of a lease: usage series, events, termination
+  audit --lease LEASE          the same timeline, for a lease that ended long ago
+  events                       follow the events you may see, one JSON object per line
+  metrics                      Prometheus metrics
 
 Sizes take a binary suffix (512M, 8G). LEASE may be "self" inside a lease.
 Commands that change something accept --dry-run where the daemon supports it.
@@ -40,7 +45,7 @@ A command that waits for a lease exits 0 if it ended with a 2xx code, else 3.
 
 // pending names commands that land in later milestones.
 var pending = map[string]string{
-	"suggest": "M3", "trace": "M3", "audit": "M3", "top": "M4", "done": "M4",
+	"top": "M4", "done": "M4",
 }
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
@@ -71,6 +76,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		"host": c.host, "run": c.run, "spawn": c.spawn, "available": c.available,
 		"ls": c.ls, "get": c.get, "resize": c.resize, "terminate": c.terminate,
 		"kill": c.kill, "wait-children": c.waitChildren,
+		"suggest": c.suggest, "trace": c.trace, "audit": c.audit, "events": c.events, "metrics": c.metrics,
 	}
 	h, ok := handlers[cmd]
 	if !ok {
@@ -426,5 +432,86 @@ func (c *cli) waitChildren(ctx context.Context, args []string) (int, error) {
 			return 3, nil
 		}
 	}
+	return 0, nil
+}
+
+// suggest prints one number, so that it can be used in place:
+//
+//	subactl spawn --memory "$(subactl suggest worker)" -- ...
+//
+// Whether the number comes from history or is the default goes to stderr.
+func (c *cli) suggest(ctx context.Context, args []string) (int, error) {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return 2, errors.New("a kind is required, e.g. subactl suggest worker")
+	}
+	kind := args[0]
+	fs := c.flags("suggest")
+	lease := fs.String("lease", string(api.Self), "the lease whose view to use; operators must name one of their leads")
+	if err := fs.Parse(args[1:]); err != nil {
+		return 2, err
+	}
+	a, err := c.api.Available(ctx, api.LeaseID(*lease), kind)
+	if err != nil {
+		return 1, err
+	}
+	s := a.Suggest[kind]
+	fmt.Fprintln(c.out, s.Memory)
+	if s.Default {
+		fmt.Fprintf(c.err, "%s: default of %s; only %d samples of this kind so far\n", kind, api.FormatBytes(s.Memory), s.Samples)
+	} else {
+		fmt.Fprintf(c.err, "%s: %s from %d samples (%s)\n", kind, api.FormatBytes(s.Memory), s.Samples, s.MemBasis)
+	}
+	return 0, nil
+}
+
+func (c *cli) trace(ctx context.Context, args []string) (int, error) {
+	id, rest, err := leaseArg(args, "")
+	if err != nil {
+		return 2, err
+	}
+	if err := c.flags("trace").Parse(rest); err != nil {
+		return 2, err
+	}
+	tr, err := c.api.Trace(ctx, id)
+	if err != nil {
+		return 1, err
+	}
+	c.print(tr)
+	return 0, nil
+}
+
+func (c *cli) audit(ctx context.Context, args []string) (int, error) {
+	fs := c.flags("audit")
+	lease := fs.String("lease", "", "the lease whose timeline to rebuild")
+	if err := fs.Parse(args); err != nil {
+		return 2, err
+	}
+	if *lease == "" {
+		return 2, errors.New("--lease is required, e.g. subactl audit --lease ls_7f3a9c21")
+	}
+	return c.trace(ctx, []string{*lease})
+}
+
+func (c *cli) events(ctx context.Context, args []string) (int, error) {
+	if err := c.flags("events").Parse(args); err != nil {
+		return 2, err
+	}
+	enc := json.NewEncoder(c.out)
+	err := c.api.Events(ctx, func(e api.Event) error { return enc.Encode(e) })
+	if err != nil && ctx.Err() == nil {
+		return 1, err
+	}
+	return 0, nil
+}
+
+func (c *cli) metrics(ctx context.Context, args []string) (int, error) {
+	if err := c.flags("metrics").Parse(args); err != nil {
+		return 2, err
+	}
+	text, err := c.api.Metrics(ctx)
+	if err != nil {
+		return 1, err
+	}
+	fmt.Fprint(c.out, text)
 	return 0, nil
 }

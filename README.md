@@ -18,7 +18,12 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
   shim, nested leases, whole-group reaping, escape prevention and
   fail-closed restart. Integration tests named after the acceptance
   criteria (F1-F4, F11-F14, F33) run with `make integration`.
-- Next is M3: capacity tracking, the safety net, telemetry, audit and trace.
+- **M3, quota and observability: done.** Effective capacity that follows
+  external load, the capacity-shrunk state, the safety net, NEAR_LIMIT,
+  wall-time and output limits, the audit log, quota suggestions,
+  Prometheus metrics and per-lease traces (F5-F11, F30, F32).
+- Next is M4: the lead's pty, self-wrapping, the inbox, graceful
+  termination, progress beacons and idle detection.
 
 ## Try it
 

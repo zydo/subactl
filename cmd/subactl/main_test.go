@@ -117,7 +117,8 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// A refusal exits 1 with a structured reason on stderr.
-	code, _, errs := h.cli("spawn", "--parent", id, "--memory", "6G", "--", "worker")
+	code, out, errs := h.cli("spawn", "--parent", id, "--memory", "6G", "--", "worker")
+	_ = out
 	var refusal api.Error
 	if json.Unmarshal([]byte(errs), &refusal); code != 1 || refusal.Code != api.ErrRejected || refusal.Reason != api.ReasonParentBudget {
 		t.Fatalf("exit %d, stderr %s", code, errs)
@@ -150,12 +151,28 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("get %+v", got)
 	}
 
+	// Observability through the CLI: suggestion, trace, metrics.
+	code, out, errs = h.cli("suggest", "worker", "--lease", id)
+	if code != 0 || strings.TrimSpace(out) != "2147483648" || !strings.Contains(errs, "default") {
+		t.Fatalf("suggest: exit %d, %q, %q", code, out, errs)
+	}
+	var tr api.Trace
+	h.ok(&tr, "trace", string(kid.ID))
+	if tr.Termination == nil || tr.Termination.Code != api.CodeReleased || len(tr.Events) < 3 {
+		t.Fatalf("trace %+v", tr)
+	}
+	h.ok(&tr, "audit", "--lease", string(kid.ID))
+	code, out, _ = h.cli("metrics")
+	if code != 0 || !strings.Contains(out, `subactl_terminations_total{code="204"} 1`) || !strings.Contains(out, `subactl_admission_rejections_total{reason="parent_budget"} 1`) {
+		t.Fatalf("metrics: exit %d\n%s", code, out)
+	}
+
 	h.ok(&term, "kill", id)
 	if term.Code != api.CodeKilled {
 		t.Fatalf("kill %+v", term)
 	}
 	var waited api.WaitChildrenResponse
-	code, out, _ := h.cli("wait-children", id, "--self")
+	code, out, _ = h.cli("wait-children", id, "--self")
 	if json.Unmarshal([]byte(out), &waited); code != 3 || !waited.Done || len(waited.Results) != 2 {
 		t.Fatalf("wait-children exit %d: %s", code, out)
 	}
@@ -201,7 +218,7 @@ func TestCLIUsageErrors(t *testing.T) {
 	h := harness{t: t, socket: "/nonexistent/subactl.sock"}
 	for _, args := range [][]string{
 		{}, {"frobnicate"}, {"get"}, {"run", "--memory", "lots", "--", "x"}, {"run", "--memory", "1G"},
-		{"run", "-it", "--", "x"}, {"top"}, {"suggest", "worker"},
+		{"run", "-it", "--", "x"}, {"top"}, {"suggest"}, {"audit"}, {"trace"},
 	} {
 		if code, _, errs := h.cli(args...); code != 2 || errs == "" {
 			t.Errorf("subactl %v: exit %d, stderr %q; want exit 2 with a message", args, code, errs)
@@ -245,7 +262,7 @@ func TestStrictHTTP(t *testing.T) {
 		{"POST", "/v1/leases", ``, 400, api.ErrInvalidArgument, ""},
 		{"POST", "/v1/leases", `{"envelope":{"memory":1024}` + uid + `} trailing`, 400, api.ErrInvalidArgument, ""},
 		{"GET", "/v1/leases/ls_nope", ``, 404, api.ErrNotFound, ""},
-		{"GET", "/v1/events", ``, 501, api.ErrNotImplemented, ""},
+		{"GET", "/v1/leases/ls_nope/inbox", ``, 501, api.ErrNotImplemented, ""},
 		{"POST", "/v1/leases/ls_nope/notify", `{}`, 501, api.ErrNotImplemented, ""},
 	} {
 		status, e := do(tc.method, tc.path, tc.body)

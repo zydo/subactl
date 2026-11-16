@@ -12,14 +12,17 @@ import (
 	"os/signal"
 	"os/user"
 	"path/filepath"
+	goruntime "runtime"
 	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/zydo/subactl/api"
 	"github.com/zydo/subactl/client"
+	"github.com/zydo/subactl/internal/audit"
 	"github.com/zydo/subactl/internal/backend"
 	"github.com/zydo/subactl/internal/backend/cgroup2"
+	"github.com/zydo/subactl/internal/capacity"
 	"github.com/zydo/subactl/internal/daemon"
 	"github.com/zydo/subactl/internal/hostmem"
 )
@@ -50,6 +53,7 @@ func run() error {
 	reserveFlag := flag.String("reserve", "", "memory kept for the system, e.g. 8G (default: the larger of 15% and 8G)")
 	cgroupBase := flag.String("cgroup", "/sys/fs/cgroup/subactl", "cgroup under which every lease lives (cgroup2 backend)")
 	socketGroup := flag.String("socket-group", "subactl", "group that may connect to the socket")
+	capacityCgroup := flag.String("capacity-cgroup", "", "treat this cgroup's memory.max and usage as the machine, for a daemon inside a capped cgroup")
 	stateDir := flag.String("state", envOr("SUBACTL_STATE", "/var/lib/subactl"), "state directory: scratch directories and, later, the audit log")
 	flag.Parse()
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -72,8 +76,24 @@ func run() error {
 		return fmt.Errorf("unknown backend %q: want cgroup2 or fake", *backendName)
 	}
 
-	total, err := hostmem.Total()
-	if err != nil {
+	// What "the machine" is: an outer cgroup when told so, the whole host
+	// on Linux, and a fixed total elsewhere.
+	var err error
+	var host capacity.Reader
+	switch {
+	case *capacityCgroup != "":
+		host = capacity.CgroupReader{Dir: *capacityCgroup}
+	case goruntime.GOOS == "linux":
+		host = capacity.MeminfoReader{Path: "/proc/meminfo"}
+	}
+	var total int64
+	if host != nil {
+		h, err := host.Read()
+		if err != nil {
+			return fmt.Errorf("read host memory: %w", err)
+		}
+		total = h.Total
+	} else if total, err = hostmem.Total(); err != nil {
 		return fmt.Errorf("read total memory: %w", err)
 	}
 	reserve := hostmem.DefaultReserve(total)
@@ -82,19 +102,35 @@ func run() error {
 			return fmt.Errorf("--reserve: %w", err)
 		}
 	}
-	// TODO(M3): subtract external usage and recompute every second.
-	capacity := max(0, total-reserve)
+	// With a host reader the capacity is recomputed every second and the
+	// flag is only a cap on it; without one it is fixed.
+	var capacityLimit int64
 	if *capacityFlag != "" {
-		limit, err := api.ParseBytes(*capacityFlag)
-		if err != nil {
+		if capacityLimit, err = api.ParseBytes(*capacityFlag); err != nil {
 			return fmt.Errorf("--capacity: %w", err)
 		}
-		capacity = min(capacity, limit)
+	}
+	if host == nil {
+		fixed := max(0, total-reserve)
+		if capacityLimit > 0 {
+			fixed = min(fixed, capacityLimit)
+		}
+		capacityLimit = fixed
+	}
+	auditDir := filepath.Join(*stateDir, "audit")
+	auditLog := audit.Open(auditDir)
+	defer auditLog.Close()
+	suggest := audit.NewSuggester(2<<30, be.MemBasis())
+	if err := suggest.Load(auditDir); err != nil {
+		log.Warn("cannot load the quota history", "err", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	m, err := daemon.NewManager(ctx, daemon.Config{Backend: be, Capacity: capacity, MemTotal: total, Reserve: reserve, Log: log})
+	m, err := daemon.NewManager(ctx, daemon.Config{
+		Backend: be, Capacity: capacityLimit, MemTotal: total, Reserve: reserve, Host: host,
+		Audit: auditLog, AuditDir: auditDir, Suggest: suggest, Log: log,
+	})
 	if err != nil {
 		return err
 	}
@@ -129,7 +165,7 @@ func run() error {
 
 	srv := &http.Server{Handler: daemon.NewServer(m, nil), ConnContext: daemon.ConnContext}
 	log.Info("subactld listening", "socket", *socket, "backend", be.Name(),
-		"effective_capacity", api.FormatBytes(capacity), "reserve", api.FormatBytes(reserve))
+		"effective_capacity", api.FormatBytes(m.Host().EffectiveCapacity), "reserve", api.FormatBytes(reserve))
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	select {

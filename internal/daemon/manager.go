@@ -17,16 +17,40 @@ import (
 	"time"
 
 	"github.com/zydo/subactl/api"
+	"github.com/zydo/subactl/internal/audit"
 	"github.com/zydo/subactl/internal/backend"
+	"github.com/zydo/subactl/internal/capacity"
 	"github.com/zydo/subactl/internal/ledger"
+	"github.com/zydo/subactl/internal/telemetry"
 )
 
 // Config configures a Manager.
 type Config struct {
-	Backend  backend.Backend
-	Capacity int64 // effective capacity in bytes
+	Backend backend.Backend
+	// Capacity is the effective capacity in bytes when Host is nil, and a
+	// cap on the computed capacity when Host is set (zero: no cap).
+	Capacity int64
 	MemTotal int64
 	Reserve  int64
+	// Host reads the machine once per tick. With it the effective capacity
+	// follows external load and the safety net is armed; without it the
+	// capacity is fixed.
+	Host capacity.Reader
+	// NearLimit is the share of the hard limit at which NEAR_LIMIT is sent
+	// (default 0.9).
+	NearLimit float64
+	// SafetyWindow is what planners get between the warning and the first
+	// safety-net termination (default 5s).
+	SafetyWindow time.Duration
+	// Audit receives the audit records; nil keeps none.
+	Audit *audit.Log
+	// AuditDir is where traces of leases no longer in memory are read from.
+	AuditDir string
+	// Suggest holds the history behind quota suggestions; nil starts empty.
+	Suggest *audit.Suggester
+	// DefaultSuggestion is suggested for a kind without enough history
+	// (default 2GiB).
+	DefaultSuggestion int64
 	// DefaultGrace is how long terminate waits before SIGTERM (default 30s).
 	DefaultGrace time.Duration
 	// TermWait is how long terminate waits after SIGTERM (default 10s).
@@ -90,6 +114,8 @@ type Manager struct {
 	// Tests set it to model a daemon crash inside one process.
 	abandoned atomic.Bool
 
+	obs *observer
+
 	admit sync.Mutex // serialises ledger-plus-backend changes to reservations
 	mu    sync.Mutex
 	rt    map[api.LeaseID]*runtime
@@ -105,6 +131,15 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 	if cfg.TermWait == 0 {
 		cfg.TermWait = 10 * time.Second
 	}
+	if cfg.NearLimit == 0 {
+		cfg.NearLimit = 0.9
+	}
+	if cfg.SafetyWindow == 0 {
+		cfg.SafetyWindow = 5 * time.Second
+	}
+	if cfg.DefaultSuggestion == 0 {
+		cfg.DefaultSuggestion = 2 << 30
+	}
 	if cfg.Tick == 0 {
 		cfg.Tick = time.Second
 	}
@@ -118,60 +153,22 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 		cfg: cfg, be: cfg.Backend, log: cfg.Log,
 		led: ledger.New(cfg.Capacity), rt: map[api.LeaseID]*runtime{},
 	}
+	m.obs = newObserver(cfg)
+	if cfg.Host != nil {
+		// Start from a real reading rather than from the bare cap.
+		if h, err := cfg.Host.Read(); err == nil {
+			m.led.SetEffectiveCapacity(capacity.Effective(cfg.Capacity, h, cfg.Reserve, capacity.External(h, 0)))
+			m.obs.host, m.obs.external = h, capacity.External(h, 0)
+		}
+	}
 	if err := m.failClosed(ctx); err != nil {
 		return nil, err
 	}
-	go m.limitLoop(ctx)
+	go m.tickLoop(ctx)
 	if sc, ok := m.be.(backend.EscapeScanner); ok {
 		go m.escapeLoop(ctx, sc)
 	}
 	return m, nil
-}
-
-// limitLoop enforces the two limits the kernel does not: wall time and
-// output. Both are checked once per tick, so a lease can overrun by up to
-// one tick; that is the "soft" in the design's table.
-func (m *Manager) limitLoop(ctx context.Context) {
-	tick := time.NewTicker(m.cfg.Tick)
-	defer tick.Stop()
-	meter, _ := m.be.(backend.OutputMeter)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
-		}
-		type running struct {
-			id      api.LeaseID
-			group   backend.ACGroup
-			started time.Time
-		}
-		var live []running
-		m.mu.Lock()
-		for id, rt := range m.rt {
-			if rt.proc != nil {
-				live = append(live, running{id, rt.group, rt.started})
-			}
-		}
-		m.mu.Unlock()
-		for _, r := range live {
-			ls, ok := m.led.Get(r.id)
-			if !ok || ls.State != api.StateRunning {
-				continue
-			}
-			if wall := ls.Envelope.Wall; wall > 0 {
-				if elapsed := time.Since(r.started); elapsed >= time.Duration(wall)*time.Second {
-					go m.reap(r.id, api.CodeWallExceeded, map[string]any{"wall_limit_seconds": wall, "elapsed_seconds": elapsed.Seconds()})
-					continue
-				}
-			}
-			if limit := ls.Envelope.Output; limit > 0 && meter != nil {
-				if n, err := meter.OutputBytes(ctx, r.group); err == nil && n > limit {
-					go m.reap(r.id, api.CodeOutputExceeded, map[string]any{"output_limit_bytes": limit, "output_bytes": n})
-				}
-			}
-		}
-	}
 }
 
 // escapeLoop looks every few seconds for processes that left their acgroup
@@ -194,6 +191,7 @@ func (m *Manager) escapeLoop(ctx context.Context, sc backend.EscapeScanner) {
 		for _, e := range found {
 			_ = syscall.Kill(e.Pid, syscall.SIGKILL)
 			m.log.Warn("escaped process killed", "pid", e.Pid, "lease", e.Lease)
+			m.publish(telemetry.EventEscape, e.Lease, map[string]any{"pid": e.Pid})
 			// The lease may be long gone; then the kill is all there is to do.
 			m.reap(e.Lease, api.CodeEscapeDetected, map[string]any{"escaped_pid": e.Pid})
 		}
@@ -245,12 +243,18 @@ func (m *Manager) runtime(id api.LeaseID) *runtime {
 // Host returns the machine-wide view.
 func (m *Manager) Host() api.Host {
 	eff, alloc, shrunk := m.led.Totals()
-	return api.Host{
+	h := api.Host{
 		Backend: m.be.Name(), MemBasis: m.be.MemBasis(),
 		MemTotal: m.cfg.MemTotal, Reserve: m.cfg.Reserve,
 		EffectiveCapacity: eff, Allocated: alloc, CapacityShrunk: shrunk,
 		Capabilities: m.be.Capabilities(),
 	}
+	if m.cfg.Host != nil {
+		m.obs.mu.Lock()
+		h.MemTotal, h.External = m.obs.host.Total, m.obs.external
+		m.obs.mu.Unlock()
+	}
+	return h
 }
 
 // resolve finds the lease named by id (or "self") and checks that the
@@ -371,7 +375,7 @@ func (m *Manager) Acquire(ctx context.Context, c Caller, req api.AcquireRequest)
 	}
 	ls, err := m.led.Acquire(p)
 	if err != nil {
-		return api.Lease{}, ledgerErr(err)
+		return api.Lease{}, m.refused(err)
 	}
 	if req.DryRun {
 		return ls, nil
@@ -392,6 +396,12 @@ func (m *Manager) Acquire(ctx context.Context, c Caller, req api.AcquireRequest)
 		}
 	}
 	m.log.Info("lease admitted", "lease", ls.ID, "parent", ls.Parent, "kind", ls.Kind, "memory", ls.Envelope.Memory)
+	who := fmt.Sprintf("operator uid %d", c.UID)
+	if c.Lease != "" {
+		who = "lease " + string(c.Lease)
+	}
+	m.auditLease(audit.TypeAcquire, ls, func(r *audit.Record) { r.Caller, r.Envelope = who, &ls.Envelope })
+	m.publish(telemetry.EventState, ls.ID, map[string]any{"state": api.StateAdmitted})
 	return ls, nil
 }
 
@@ -419,6 +429,15 @@ func (m *Manager) watchHolder(id api.LeaseID, rt *runtime, pid int) error {
 		}
 	}()
 	return nil
+}
+
+// refused turns a ledger error into an API error and counts a rejection.
+func (m *Manager) refused(err error) error {
+	var rej *ledger.Rejection
+	if errors.As(err, &rej) {
+		m.obs.metrics.Reject(rej.Reason)
+	}
+	return ledgerErr(err)
 }
 
 func ledgerErr(err error) error {
@@ -452,6 +471,7 @@ func (m *Manager) Spawn(ctx context.Context, c Caller, id api.LeaseID, req api.S
 	}
 	rt.proc, rt.started = proc, time.Now()
 	go m.onMainExit(ls.ID, proc.Wait)
+	go m.publish(telemetry.EventState, ls.ID, map[string]any{"state": api.StateRunning, "pid": proc.Pid()})
 	return api.SpawnResponse{Pid: proc.Pid()}, nil
 }
 
@@ -565,6 +585,7 @@ func (m *Manager) reap(id api.LeaseID, code int, evidence map[string]any) {
 		m.mu.Lock()
 		delete(m.rt, mk.ID)
 		m.mu.Unlock()
+		m.ended(ls, term)
 		close(rt.done)
 		m.log.Info("lease reaped", "lease", mk.ID, "code", final, "name", term.Name)
 	}
@@ -661,13 +682,21 @@ func (m *Manager) List(ctx context.Context, c Caller, lead api.LeaseID) ([]api.L
 }
 
 // Available returns the remaining budget of a subtree.
-func (m *Manager) Available(c Caller, id api.LeaseID) (api.Available, error) {
+func (m *Manager) Available(c Caller, id api.LeaseID, kinds ...string) (api.Available, error) {
 	ls, err := m.resolve(c, id)
 	if err != nil {
 		return api.Available{}, err
 	}
 	a, _ := m.led.Available(ls.ID)
 	a.MemBasis = m.be.MemBasis()
+	// Suggestions are shared across leads on purpose: more history, better
+	// numbers. Kinds the caller names are always answered, with the default
+	// if need be.
+	for _, k := range append(m.obs.suggest.Kinds(), kinds...) {
+		if k != "" {
+			a.Suggest[k] = m.obs.suggest.Suggest(k)
+		}
+	}
 	return a, nil
 }
 
@@ -681,6 +710,12 @@ func (m *Manager) Resize(ctx context.Context, c Caller, id api.LeaseID, p api.En
 	if ls.ID == c.Lease {
 		return api.Lease{}, apiErr(http.StatusForbidden, api.ErrSelfResize, "a node cannot resize itself; use resize-request to ask the parent")
 	}
+	return m.applyResize(ctx, ls, p, "planner")
+}
+
+// applyResize changes a lease's envelope in the ledger and the backend.
+// by says who asked: a planner, or a rule the planner declared.
+func (m *Manager) applyResize(ctx context.Context, ls api.Lease, p api.EnvelopePatch, by string) (api.Lease, error) {
 	next := ls.Envelope
 	for _, f := range []struct {
 		src *int64
@@ -708,7 +743,7 @@ func (m *Manager) Resize(ctx context.Context, c Caller, id api.LeaseID, p api.En
 	}
 	out, err := m.led.Resize(ls.ID, p, usage)
 	if err != nil {
-		return api.Lease{}, ledgerErr(err)
+		return api.Lease{}, m.refused(err)
 	}
 	if p.DryRun {
 		return out, nil
@@ -722,7 +757,9 @@ func (m *Manager) Resize(ctx context.Context, c Caller, id api.LeaseID, p api.En
 		}
 		return api.Lease{}, apiErr(http.StatusInternalServerError, api.ErrInternal, "apply limits: %v", err)
 	}
-	m.log.Info("lease resized", "lease", ls.ID, "memory", out.Envelope.Memory)
+	m.log.Info("lease resized", "lease", ls.ID, "memory", out.Envelope.Memory, "by", by)
+	m.auditLease(audit.TypeResize, out, func(r *audit.Record) { r.Caller, r.Envelope = by, &out.Envelope })
+	m.publish(telemetry.EventResized, ls.ID, map[string]any{"by": by, "memory": out.Envelope.Memory, "previous_memory": ls.Envelope.Memory})
 	return m.withUsage(ctx, out), nil
 }
 

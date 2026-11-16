@@ -54,10 +54,10 @@ func Routes() []Route {
 		{ID: "requestResize", Method: "POST", Path: "/v1/leases/{id}/resize-request", Pending: "M4"},
 		{ID: "notify", Method: "POST", Path: "/v1/leases/{id}/notify", Pending: "M4"},
 		{ID: "reportProgress", Method: "POST", Path: "/v1/leases/{id}/progress", Pending: "M4"},
-		{ID: "getTrace", Method: "GET", Path: "/v1/leases/{id}/trace", Pending: "M3"},
+		{ID: "getTrace", Method: "GET", Path: "/v1/leases/{id}/trace", handler: (*Server).getTrace},
 		{ID: "streamInbox", Method: "GET", Path: "/v1/leases/{id}/inbox", Pending: "M4"},
-		{ID: "streamEvents", Method: "GET", Path: "/v1/events", Pending: "M3"},
-		{ID: "getMetrics", Method: "GET", Path: "/metrics", Pending: "M3"},
+		{ID: "streamEvents", Method: "GET", Path: "/v1/events", handler: (*Server).streamEvents},
+		{ID: "getMetrics", Method: "GET", Path: "/metrics", handler: (*Server).getMetrics},
 	}
 }
 
@@ -226,7 +226,7 @@ func (s *Server) resizeLease(w http.ResponseWriter, r *http.Request, c Caller) e
 }
 
 func (s *Server) getAvailable(w http.ResponseWriter, r *http.Request, c Caller) error {
-	a, err := s.m.Available(c, leaseID(r))
+	a, err := s.m.Available(c, leaseID(r), r.URL.Query()["kind"]...)
 	if err != nil {
 		return err
 	}
@@ -285,3 +285,52 @@ func (s *Server) waitChildren(w http.ResponseWriter, r *http.Request, c Caller) 
 
 // String makes a route readable in test failures.
 func (r Route) String() string { return fmt.Sprintf("%s %s %s", r.ID, r.Method, r.Path) }
+
+func (s *Server) getTrace(w http.ResponseWriter, r *http.Request, c Caller) error {
+	tr, err := s.m.Trace(c, leaseID(r))
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, tr)
+	return nil
+}
+
+func (s *Server) getMetrics(w http.ResponseWriter, r *http.Request, c Caller) error {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	_, _ = io.WriteString(w, s.m.MetricsText())
+	return nil
+}
+
+// streamEvents sends the events the caller may see as server-sent events,
+// one JSON object per "data:" line, until the client goes away.
+func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request, c Caller) error {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return apiErr(http.StatusInternalServerError, api.ErrInternal, "this connection cannot stream")
+	}
+	events, stop := s.m.Events(c)
+	defer stop()
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, ": subscribed\n\n")
+	flusher.Flush()
+	for {
+		select {
+		case <-r.Context().Done():
+			return nil
+		case e, ok := <-events:
+			if !ok {
+				return nil
+			}
+			data, err := json.Marshal(e)
+			if err != nil {
+				continue
+			}
+			if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e.Type, data); err != nil {
+				return nil
+			}
+			flusher.Flush()
+		}
+	}
+}

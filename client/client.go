@@ -7,6 +7,7 @@
 package client
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -64,12 +65,16 @@ var (
 	opTerminate    = operation{"terminate", "POST", "/v1/leases/{id}/terminate"}
 	opKill         = operation{"kill", "POST", "/v1/leases/{id}/kill"}
 	opWaitChildren = operation{"waitChildren", "POST", "/v1/leases/{id}/wait-children"}
+	opGetTrace     = operation{"getTrace", "GET", "/v1/leases/{id}/trace"}
+	opStreamEvents = operation{"streamEvents", "GET", "/v1/events"}
+	opGetMetrics   = operation{"getMetrics", "GET", "/metrics"}
 
 	// operations lists what the client implements; the conformance test
 	// compares it with the contract.
 	operations = []operation{
 		opGetHost, opCreateLease, opListLeases, opGetLease, opResizeLease,
 		opGetAvailable, opSpawn, opTerminate, opKill, opWaitChildren,
+		opGetTrace, opStreamEvents, opGetMetrics,
 	}
 )
 
@@ -150,9 +155,78 @@ func (c *Client) Resize(ctx context.Context, id api.LeaseID, p api.EnvelopePatch
 }
 
 // Available returns the remaining budget of a subtree. id may be api.Self.
-func (c *Client) Available(ctx context.Context, id api.LeaseID) (api.Available, error) {
+// Each kind named is included in the suggestions even without history.
+func (c *Client) Available(ctx context.Context, id api.LeaseID, kinds ...string) (api.Available, error) {
 	var out api.Available
-	return out, c.do(ctx, opGetAvailable, id, nil, nil, &out)
+	return out, c.do(ctx, opGetAvailable, id, url.Values{"kind": kinds}, nil, &out)
+}
+
+// Trace returns the timeline of a lease: usage series, events, termination.
+func (c *Client) Trace(ctx context.Context, id api.LeaseID) (api.Trace, error) {
+	var out api.Trace
+	return out, c.do(ctx, opGetTrace, id, nil, nil, &out)
+}
+
+// Metrics returns the Prometheus metrics as text.
+func (c *Client) Metrics(ctx context.Context) (string, error) {
+	resp, err := c.open(ctx, opGetMetrics)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	return string(data), err
+}
+
+// Events streams the events the caller may see to fn until ctx ends, the
+// daemon closes the stream, or fn returns an error, which Events returns.
+func (c *Client) Events(ctx context.Context, fn func(api.Event) error) error {
+	resp, err := c.open(ctx, opStreamEvents)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	sc := bufio.NewScanner(resp.Body)
+	sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
+	for sc.Scan() {
+		data, ok := strings.CutPrefix(sc.Text(), "data: ")
+		if !ok {
+			continue // comments, event names and blank separators
+		}
+		var e api.Event
+		if err := json.Unmarshal([]byte(data), &e); err != nil {
+			return fmt.Errorf("subactld: bad event: %w", err)
+		}
+		if err := fn(e); err != nil {
+			return err
+		}
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return sc.Err()
+}
+
+// open starts a request whose body the caller reads itself.
+func (c *Client) open(ctx context.Context, op operation) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, op.method, "http://subactld"+op.path, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("subactld: %w", err)
+	}
+	if resp.StatusCode >= 300 {
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(resp.Body)
+		e := &api.Error{}
+		if json.Unmarshal(data, e) != nil || e.Code == "" {
+			e = &api.Error{Code: api.ErrInternal, Message: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))}
+		}
+		return nil, e
+	}
+	return resp, nil
 }
 
 // Spawn starts the main process of an admitted lease.

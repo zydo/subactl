@@ -15,9 +15,6 @@ var pending = map[string]string{
 	"notify":         "M4",
 	"reportProgress": "M4",
 	"streamInbox":    "M4",
-	"getTrace":       "M3",
-	"streamEvents":   "M3",
-	"getMetrics":     "M3",
 }
 
 func TestClientMatchesContract(t *testing.T) {

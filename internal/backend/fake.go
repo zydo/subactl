@@ -391,3 +391,14 @@ func (f *Fake) OutputBytes(_ context.Context, g ACGroup) (int64, error) {
 	}
 	return fg.output, nil
 }
+
+// OwnUsage returns the memory of the lease's own processes, nested
+// acgroups excluded, or zero if the acgroup is gone.
+func (f *Fake) OwnUsage(lease api.LeaseID) int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if g, ok := f.groups[lease]; ok {
+		return g.mem
+	}
+	return 0
+}
