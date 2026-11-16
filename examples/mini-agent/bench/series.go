@@ -43,8 +43,12 @@ type Summary struct {
 	LeadExit      int     `json:"lead_exit"`
 	// Codes counts the leases that ended in this run by termination code
 	// (groups B and C).
-	Codes        map[string]int `json:"codes,omitempty"`
-	OrphanSample []string       `json:"orphan_sample,omitempty"` // a few command lines
+	Codes map[string]int `json:"codes,omitempty"`
+	// WarnedBeforeNet says, for a run in which the safety net fired,
+	// whether planners had been sent CAPACITY_SHRUNK before the first
+	// lease was terminated. It is absent when the net did not fire.
+	WarnedBeforeNet *bool    `json:"warned_before_net,omitempty"`
+	OrphanSample    []string `json:"orphan_sample,omitempty"` // a few command lines
 }
 
 const gib = float64(1 << 30)

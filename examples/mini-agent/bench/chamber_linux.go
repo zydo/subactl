@@ -230,6 +230,54 @@ func terminationCodes(dir string, since time.Time) map[string]int {
 	return out
 }
 
+// warnedBeforeNet compares, in the audit log, the first warning that
+// memory is below the reserve line with the first safety-net termination.
+func warnedBeforeNet(dir string, since time.Time) *bool {
+	var warned, killed time.Time
+	files, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+	for _, name := range files {
+		f, err := os.Open(name)
+		if err != nil {
+			continue
+		}
+		sc := bufio.NewScanner(f)
+		sc.Buffer(make([]byte, 0, 64<<10), 4<<20)
+		for sc.Scan() {
+			var r struct {
+				At    time.Time `json:"at"`
+				Type  string    `json:"type"`
+				Event *struct {
+					Type string         `json:"type"`
+					Data map[string]any `json:"data"`
+				} `json:"event"`
+				Termination *struct {
+					Code int `json:"code"`
+				} `json:"termination"`
+			}
+			if json.Unmarshal(sc.Bytes(), &r) != nil || r.At.Before(since) {
+				continue
+			}
+			first := func(t *time.Time) {
+				if t.IsZero() || r.At.Before(*t) {
+					*t = r.At
+				}
+			}
+			switch {
+			case r.Event != nil && r.Event.Type == "CAPACITY_SHRUNK" && r.Event.Data["reason"] == "below_reserve":
+				first(&warned)
+			case r.Type == "terminate" && r.Termination != nil && r.Termination.Code == 503:
+				first(&killed)
+			}
+		}
+		f.Close()
+	}
+	if killed.IsZero() {
+		return nil
+	}
+	ok := !warned.IsZero() && warned.Before(killed)
+	return &ok
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
@@ -471,6 +519,7 @@ func Run(o Options) (*Summary, error) {
 		stopDaemon() // flushes the audit log
 		sum.Codes = terminationCodes(filepath.Join(o.StateDir, "audit"), start)
 		sum.SafetyNet = sum.Codes["503"]
+		sum.WarnedBeforeNet = warnedBeforeNet(filepath.Join(o.StateDir, "audit"), start)
 		sum.WorkLost += sum.Codes["413"] + sum.Codes["503"]
 	}
 

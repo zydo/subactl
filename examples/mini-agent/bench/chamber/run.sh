@@ -41,5 +41,9 @@ docker run --rm --privileged \
       mkdir -p "/host/$r"
       cp "$r/summary.json" "$r/series.jsonl" "$r/lead.log" "/host/$r/"
       [ -f "$r/subactld.log" ] && cp "$r/subactld.log" "/host/$r/"
-    done'
+      # The audit log of the run (group B keeps one per run).
+      [ -d "$r/state/audit" ] && cp -r "$r/state/audit" "/host/$r/audit"
+    done
+    # Group C keeps one audit log across all its runs.
+    if [ -d state/audit ]; then cp -r state/audit /host/audit; fi'
 echo "results are in $out"
