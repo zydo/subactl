@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -167,6 +168,11 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("metrics: exit %d\n%s", code, out)
 	}
 
+	code, out, _ = h.cli("top", "--once")
+	if code != 0 || !strings.Contains(out, id) || !strings.Contains(out, "capacity 32GiB") {
+		t.Fatalf("top: exit %d\n%s", code, out)
+	}
+
 	h.ok(&term, "kill", id)
 	if term.Code != api.CodeKilled {
 		t.Fatalf("kill %+v", term)
@@ -218,7 +224,7 @@ func TestCLIUsageErrors(t *testing.T) {
 	h := harness{t: t, socket: "/nonexistent/subactl.sock"}
 	for _, args := range [][]string{
 		{}, {"frobnicate"}, {"get"}, {"run", "--memory", "lots", "--", "x"}, {"run", "--memory", "1G"},
-		{"spawn", "-it", "--", "x"}, {"top"}, {"suggest"}, {"audit"}, {"trace"},
+		{"spawn", "-it", "--", "x"}, {"top", "--bogus"}, {"suggest"}, {"audit"}, {"trace"},
 	} {
 		if code, _, errs := h.cli(args...); code != 2 || errs == "" {
 			t.Errorf("subactl %v: exit %d, stderr %q; want exit 2 with a message", args, code, errs)
@@ -329,5 +335,41 @@ func TestRunInteractive(t *testing.T) {
 	}
 	if !strings.Contains(errs.String(), "200 COMPLETED") {
 		t.Fatalf("stderr %q", errs.String())
+	}
+}
+
+// Every command the CLI has is offered by every completion script, and
+// the scripts are valid in their shells.
+func TestCompletion(t *testing.T) {
+	h := harness{t: t, socket: "/nonexistent"}
+	for _, shell := range []string{"bash", "zsh", "fish"} {
+		code, out, errs := h.cli("completion", shell)
+		if code != 0 {
+			t.Fatalf("%s: exit %d: %s", shell, code, errs)
+		}
+		for _, name := range commands {
+			if !strings.Contains(out, name) {
+				t.Errorf("%s completion lacks %q", shell, name)
+			}
+		}
+		if path, err := exec.LookPath(shell); err == nil {
+			script := filepath.Join(t.TempDir(), "completion")
+			os.WriteFile(script, []byte(out), 0o644)
+			if msg, err := exec.Command(path, "-n", script).CombinedOutput(); err != nil {
+				t.Errorf("%s rejects its completion script: %v\n%s", shell, err, msg)
+			}
+		}
+	}
+	if code, _, _ := h.cli("completion", "tcsh"); code != 2 {
+		t.Errorf("an unknown shell: exit %d", code)
+	}
+}
+
+// The usage text and the completion list name the same commands.
+func TestUsageListsEveryCommand(t *testing.T) {
+	for _, name := range commands {
+		if !strings.Contains(usage, "\n  "+name) {
+			t.Errorf("the usage text does not list %q", name)
+		}
 	}
 }

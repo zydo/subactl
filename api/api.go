@@ -177,6 +177,17 @@ type Lease struct {
 	// Scratch is the lease's scratch directory: its stdout and stderr files
 	// and whatever it leaves there for its planner.
 	Scratch string `json:"scratch,omitempty"`
+	// Activity is the last progress beacon; absent for an agent without an
+	// adapter.
+	Activity *Activity `json:"activity,omitempty"`
+}
+
+// Activity is what an agent last reported about itself.
+type Activity struct {
+	State string    `json:"state"` // working, awaiting_input or done
+	Tool  string    `json:"tool,omitempty"`
+	Seq   int64     `json:"seq,omitempty"`
+	At    time.Time `json:"at"`
 }
 
 // LeaseList is the body of GET /v1/leases.
@@ -313,6 +324,7 @@ var Schemas = map[string]any{
 	"AcquireRequest":       AcquireRequest{},
 	"Usage":                Usage{},
 	"Lease":                Lease{},
+	"Activity":             Activity{},
 	"LeaseList":            LeaseList{},
 	"Termination":          Termination{},
 	"SpawnRequest":         SpawnRequest{},

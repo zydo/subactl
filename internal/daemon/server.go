@@ -8,6 +8,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os/user"
+	"strconv"
 	"strings"
 
 	"github.com/zydo/subactl/api"
@@ -109,7 +111,7 @@ func ConnContext(ctx context.Context, c net.Conn) context.Context {
 
 // peerIdentity maps the connection's peer pid to the acgroup it is in. A
 // process inside an acgroup is that node; any other process is an operator.
-// TODO(M4): members of the subactl-admin group are admins too.
+// Root and members of the subactl-admin group may act on every lead.
 func (s *Server) peerIdentity(r *http.Request) (Caller, error) {
 	p, ok := r.Context().Value(peerKey{}).(peer)
 	if !ok {
@@ -123,7 +125,7 @@ func (s *Server) peerIdentity(r *http.Request) (Caller, error) {
 	case err == nil:
 		return Caller{Lease: ref.Lease, UID: p.uid, PID: p.pid}, nil
 	case errors.Is(err, backend.ErrNotMember):
-		return Caller{UID: p.uid, Admin: p.uid == 0, PID: p.pid}, nil
+		return Caller{UID: p.uid, Admin: p.uid == 0 || inAdminGroup(p.uid), PID: p.pid}, nil
 	}
 	return Caller{}, err
 }
@@ -438,4 +440,30 @@ func (s *Server) attach(w http.ResponseWriter, r *http.Request, c Caller) error 
 		io.Writer
 	}{rw.Reader, conn})
 	return nil
+}
+
+// AdminGroup is the group whose members may see and end every lead.
+const AdminGroup = "subactl-admin"
+
+// inAdminGroup reports whether the user is a member of AdminGroup. A
+// machine without that group has no admins besides root.
+func inAdminGroup(uid int) bool {
+	g, err := user.LookupGroup(AdminGroup)
+	if err != nil {
+		return false
+	}
+	u, err := user.LookupId(strconv.Itoa(uid))
+	if err != nil {
+		return false
+	}
+	gids, err := u.GroupIds()
+	if err != nil {
+		return false
+	}
+	for _, id := range gids {
+		if id == g.Gid {
+			return true
+		}
+	}
+	return false
 }

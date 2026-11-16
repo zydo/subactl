@@ -228,6 +228,11 @@ func (b *Backend) Create(_ context.Context, lease api.LeaseID, parent backend.AC
 	if err := write(filepath.Join(dir, "memory.swap.max"), "0"); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fail(err)
 	}
+	if b.caps.CPU == api.LevelHard {
+		// Equal weights: leads borrow idle CPU from each other and get
+		// equal shares under contention.
+		_ = write(filepath.Join(dir, "cpu.weight"), "100")
+	}
 	if err := os.Mkdir(filepath.Join(dir, selfLeaf), 0o755); err != nil {
 		return fail(err)
 	}

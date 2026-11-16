@@ -47,6 +47,8 @@ type inbox struct {
 // beacon is the last progress report of a lease and what was already said
 // about its idleness.
 type beacon struct {
+	tool         string
+	seq          int64
 	state        string
 	at           time.Time
 	saidStalled  bool
@@ -248,6 +250,7 @@ func (m *Manager) Progress(c Caller, id api.LeaseID, req api.ProgressRequest) er
 	}
 	wasDone := b.state == stateDone
 	b.state, b.at, b.saidStalled = req.State, now, false
+	b.tool, b.seq = cleanText(req.Tool, 64), req.Seq
 	if req.State != stateDone {
 		b.saidIdleDone = false
 	}

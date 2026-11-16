@@ -529,6 +529,22 @@ components:
         scratch:
           type: string
           description: The lease's scratch directory. A child's is kept until its parent ends.
+        activity:
+          $ref: '#/components/schemas/Activity'
+    Activity:
+      type: object
+      description: The last progress beacon of an agent. Self-reported.
+      properties:
+        state:
+          type: string
+          enum: [working, awaiting_input, done]
+        tool:
+          type: string
+        seq:
+          type: integer
+        at:
+          type: string
+          format: date-time
     LeaseList:
       type: object
       properties:

@@ -672,6 +672,11 @@ func (m *Manager) record(ls api.Lease, code int, u api.Usage, ev map[string]any)
 // withUsage attaches a fresh sample to a live lease.
 func (m *Manager) withUsage(ctx context.Context, ls api.Lease) api.Lease {
 	ls.Scratch = m.scratchDir(ls.ID)
+	m.ctl.mu.Lock()
+	if b := m.ctl.beacons[ls.ID]; b != nil {
+		ls.Activity = &api.Activity{State: b.state, Tool: b.tool, Seq: b.seq, At: b.at}
+	}
+	m.ctl.mu.Unlock()
 	if rt := m.runtime(ls.ID); rt != nil {
 		if u, err := m.be.Sample(ctx, rt.group); err == nil {
 			ls.Usage = &u

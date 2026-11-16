@@ -44,6 +44,8 @@ const usage = `usage: subactl [--socket PATH] <command> [flags] [-- command...]
   done [--result PATH]         report that the task is finished; PATH is in your scratch directory
   resize-request --memory S    ask your parent for a larger envelope
   metrics                      Prometheus metrics
+  top [--once]                 live view of the lead trees you may see; q quits
+  completion bash|zsh|fish     print a completion script for that shell
 
 Sizes take a binary suffix (512M, 8G). LEASE may be "self" inside a lease.
 Commands that change something accept --dry-run where the daemon supports it.
@@ -51,9 +53,7 @@ A command that waits for a lease exits 0 if it ended with a 2xx code, else 3.
 `
 
 // pending names commands that land in later milestones.
-var pending = map[string]string{
-	"top": "M4",
-}
+var pending = map[string]string{}
 
 // stdin is where "run -it" reads what the user types; tests replace it.
 var stdin io.Reader = os.Stdin
@@ -87,7 +87,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		"ls": c.ls, "get": c.get, "resize": c.resize, "terminate": c.terminate,
 		"kill": c.kill, "wait-children": c.waitChildren,
 		"notify": c.notify, "inbox": c.inbox, "beacon": c.beacon, "done": c.done, "resize-request": c.resizeRequest,
-		"suggest": c.suggest, "trace": c.trace, "audit": c.audit, "events": c.events, "metrics": c.metrics,
+		"top":        c.top,
+		"completion": c.completion,
+		"suggest":    c.suggest, "trace": c.trace, "audit": c.audit, "events": c.events, "metrics": c.metrics,
 	}
 	h, ok := handlers[cmd]
 	if !ok {
@@ -670,4 +672,51 @@ func (c *cli) interactive(ctx context.Context, id api.LeaseID, cleanup func()) (
 		return 0, nil
 	}
 	return 3, nil
+}
+
+// commands is what the completion scripts offer.
+var commands = []string{
+	"host", "run", "spawn", "available", "ls", "get", "resize", "terminate", "kill", "wait-children",
+	"suggest", "trace", "audit", "events", "notify", "inbox", "beacon", "done", "resize-request",
+	"metrics", "top", "completion",
+}
+
+// completion prints a completion script. subactl itself is a plain
+// executable and needs no shell function, alias or sourcing to work; the
+// scripts only add tab completion of its commands.
+func (c *cli) completion(_ context.Context, args []string) (int, error) {
+	if len(args) != 1 {
+		return 2, errors.New("name a shell: subactl completion bash|zsh|fish")
+	}
+	list := strings.Join(commands, " ")
+	switch args[0] {
+	case "bash":
+		fmt.Fprintf(c.out, `_subactl() {
+  if [ "$COMP_CWORD" -eq 1 ]; then
+    COMPREPLY=($(compgen -W "%s" -- "${COMP_WORDS[COMP_CWORD]}"))
+  else
+    COMPREPLY=($(compgen -f -- "${COMP_WORDS[COMP_CWORD]}"))
+  fi
+}
+complete -F _subactl subactl
+`, list)
+	case "zsh":
+		fmt.Fprintf(c.out, `#compdef subactl
+_subactl() {
+  if (( CURRENT == 2 )); then
+    compadd %s
+  else
+    _files
+  fi
+}
+compdef _subactl subactl
+`, list)
+	case "fish":
+		for _, name := range commands {
+			fmt.Fprintf(c.out, "complete -c subactl -n __fish_use_subcommand -a %s\n", name)
+		}
+	default:
+		return 2, fmt.Errorf("unknown shell %q: want bash, zsh or fish", args[0])
+	}
+	return 0, nil
 }
