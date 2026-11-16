@@ -180,6 +180,9 @@ func (m *Manager) Notify(c Caller, id api.LeaseID, req api.NotifyRequest) error 
 	if ls.State == api.StateReaped || ls.State == api.StateReaping {
 		return apiErr(http.StatusConflict, api.ErrConflict, "lease %s has ended", ls.ID)
 	}
+	if req.DryRun {
+		return nil
+	}
 	source := "operator"
 	if c.Lease != "" {
 		source = string(c.Lease)

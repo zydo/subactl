@@ -203,7 +203,15 @@ paths:
     post:
       operationId: kill
       summary: Kill the whole tree at once. Recorded as 499.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KillRequest'
       responses:
+        '204':
+          description: A dry run. The request is valid and nothing was changed.
         '200':
           description: The termination record.
           content:
@@ -598,6 +606,8 @@ components:
             type: string
         dir:
           type: string
+        dry_run:
+          type: boolean
     SpawnResponse:
       type: object
       properties:
@@ -615,6 +625,14 @@ components:
           enum: [204, 499]
         recursive:
           type: boolean
+        dry_run:
+          type: boolean
+    KillRequest:
+      type: object
+      properties:
+        dry_run:
+          type: boolean
+          description: Check that the caller may kill the lease, and do nothing.
     WaitChildrenRequest:
       type: object
       properties:
@@ -685,6 +703,8 @@ components:
         reason:
           type: string
           description: The only free text, and only from an ancestor planner.
+        dry_run:
+          type: boolean
     ProgressRequest:
       type: object
       properties:

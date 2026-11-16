@@ -373,3 +373,49 @@ func TestUsageListsEveryCommand(t *testing.T) {
 		}
 	}
 }
+
+// F26: subactl is a plain executable. Started from bash, zsh or fish it
+// behaves the same, with no shell function, alias or sourcing involved.
+func TestShellAgnostic(t *testing.T) {
+	socket, _ := daemonOnSocket(t)
+	bin := filepath.Join(t.TempDir(), "subactl")
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	uid := ""
+	if os.Getuid() == 0 {
+		uid = "--uid 1000 "
+	}
+	// A refused request and a successful one: stdout, stderr and status.
+	script := fmt.Sprintf(`%s --socket %s run %s--dry-run --memory 100G -- agent; echo "status=$?"; %s --socket %s run %s--dry-run --memory 1G -- agent | grep -c '"memory": 1073741824'`,
+		bin, socket, uid, bin, socket, uid)
+	var first string
+	ran := 0
+	for _, shell := range []string{"bash", "zsh", "fish"} {
+		path, err := exec.LookPath(shell)
+		if err != nil {
+			t.Logf("%s is not installed here; skipped", shell)
+			continue
+		}
+		s := script
+		if shell == "fish" {
+			s = strings.ReplaceAll(s, "$?", "$status")
+		}
+		cmd := exec.Command(path, "-c", s)
+		// A SHELL the tool must not care about.
+		cmd.Env = append(os.Environ(), "SHELL=/bin/false")
+		out, _ := cmd.CombinedOutput()
+		got := string(out)
+		if !strings.Contains(got, `"reason": "mem_budget"`) || !strings.Contains(got, "status=1") || !strings.HasSuffix(strings.TrimSpace(got), "1") {
+			t.Fatalf("%s:\n%s", shell, got)
+		}
+		if ran++; first == "" {
+			first = got
+		} else if got != first {
+			t.Errorf("%s behaves differently:\n%s\nwant:\n%s", shell, got, first)
+		}
+	}
+	if ran == 0 {
+		t.Skip("no shell to test with")
+	}
+}

@@ -259,14 +259,26 @@ func (s *Server) terminate(w http.ResponseWriter, r *http.Request, c Caller) err
 	if err != nil {
 		return err
 	}
+	if req.DryRun {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
 	writeJSON(w, http.StatusOK, t)
 	return nil
 }
 
 func (s *Server) kill(w http.ResponseWriter, r *http.Request, c Caller) error {
-	t, err := s.m.Kill(r.Context(), c, leaseID(r))
+	var req api.KillRequest
+	if err := decode(r, &req, true); err != nil {
+		return err
+	}
+	t, err := s.m.Kill(r.Context(), c, leaseID(r), req)
 	if err != nil {
 		return err
+	}
+	if req.DryRun {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
 	}
 	writeJSON(w, http.StatusOK, t)
 	return nil

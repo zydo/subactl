@@ -393,10 +393,11 @@ func (c *cli) terminate(ctx context.Context, args []string) (int, error) {
 	code := fs.Int("code", api.CodeKilled, "termination code to record: 204 (released) or 499 (killed)")
 	reason := fs.String("reason", "", "free text shown to the terminated agent")
 	recursive := fs.Bool("recursive", false, "also notify the descendants")
+	dryRun := fs.Bool("dry-run", false, "check the request without terminating anything")
 	if err := fs.Parse(rest); err != nil {
 		return 2, err
 	}
-	req := api.TerminateRequest{Reason: *reason, Code: *code, Recursive: *recursive}
+	req := api.TerminateRequest{Reason: *reason, Code: *code, Recursive: *recursive, DryRun: *dryRun}
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "grace" {
 			s := grace.Seconds()
@@ -407,7 +408,16 @@ func (c *cli) terminate(ctx context.Context, args []string) (int, error) {
 	if err != nil {
 		return 1, err
 	}
+	if *dryRun {
+		return c.dryRunOK()
+	}
 	c.print(t)
+	return 0, nil
+}
+
+// dryRunOK reports a dry run that passed.
+func (c *cli) dryRunOK() (int, error) {
+	fmt.Fprintln(c.out, "ok: the request is valid; nothing was changed")
 	return 0, nil
 }
 
@@ -416,12 +426,17 @@ func (c *cli) kill(ctx context.Context, args []string) (int, error) {
 	if err != nil {
 		return 2, err
 	}
-	if err := c.flags("kill").Parse(rest); err != nil {
+	fs := c.flags("kill")
+	dryRun := fs.Bool("dry-run", false, "check the request without killing anything")
+	if err := fs.Parse(rest); err != nil {
 		return 2, err
 	}
-	t, err := c.api.Kill(ctx, id)
+	t, err := c.api.Kill(ctx, id, api.KillRequest{DryRun: *dryRun})
 	if err != nil {
 		return 1, err
+	}
+	if *dryRun {
+		return c.dryRunOK()
 	}
 	c.print(t)
 	return 0, nil
@@ -540,11 +555,15 @@ func (c *cli) notify(ctx context.Context, args []string) (int, error) {
 	fs := c.flags("notify")
 	typ := fs.String("type", "", "TERMINATE_REQUESTED, NEAR_LIMIT, RESIZED or CAPACITY_SHRUNK")
 	reason := fs.String("reason", "", "free text shown to the agent")
+	dryRun := fs.Bool("dry-run", false, "check the request without sending anything")
 	if err := fs.Parse(rest); err != nil {
 		return 2, err
 	}
-	if err := c.api.Notify(ctx, id, api.NotifyRequest{Type: *typ, Reason: *reason}); err != nil {
+	if err := c.api.Notify(ctx, id, api.NotifyRequest{Type: *typ, Reason: *reason, DryRun: *dryRun}); err != nil {
 		return 1, err
+	}
+	if *dryRun {
+		return c.dryRunOK()
 	}
 	return 0, nil
 }

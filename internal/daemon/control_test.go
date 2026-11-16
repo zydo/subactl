@@ -346,3 +346,44 @@ func TestResizeRequest(t *testing.T) {
 		var _ = telemetry.EventResized
 	})
 }
+
+// F19: every command that changes something can be checked first. A dry
+// run goes through the same validation and permission checks and then
+// changes nothing.
+func TestDryRunChangesNothing(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w := newWorld(t, nil)
+		defer w.end()
+		lead := w.lease(operator, mem(8*gib), 0)
+		kid := w.lease(node(lead), mem(2*gib), 0)
+		sib := w.lease(node(lead), mem(2*gib), 0)
+		waiting, _ := w.m.Acquire(ctx, node(lead), mem(gib))
+		box := inboxOf(t, w.m, kid)
+
+		if _, err := w.m.Kill(ctx, node(lead), kid, api.KillRequest{DryRun: true}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.m.Terminate(ctx, node(lead), kid, api.TerminateRequest{DryRun: true}); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.m.Notify(node(lead), kid, api.NotifyRequest{Type: api.MsgNearLimit, DryRun: true}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.m.Spawn(ctx, node(lead), waiting.ID, api.SpawnRequest{Argv: []string{"x"}, DryRun: true}); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(3 * time.Second)
+		if w.state(kid) != api.StateRunning || w.state(waiting.ID) != api.StateAdmitted || len(box) != 0 {
+			t.Fatalf("a dry run had an effect: kid %s, waiting %s, %d messages", w.state(kid), w.state(waiting.ID), len(box))
+		}
+		// The checks are the real ones.
+		_, err := w.m.Kill(ctx, node(sib), kid, api.KillRequest{DryRun: true})
+		wantStatus(t, err, http.StatusForbidden, api.ErrOutOfSubtree, "")
+		_, err = w.m.Terminate(ctx, node(lead), kid, api.TerminateRequest{DryRun: true, Code: 200})
+		wantStatus(t, err, http.StatusBadRequest, api.ErrInvalidArgument, "")
+		err = w.m.Notify(node(lead), kid, api.NotifyRequest{Type: "NOPE", DryRun: true})
+		wantStatus(t, err, http.StatusBadRequest, api.ErrInvalidArgument, "")
+		_, err = w.m.Spawn(ctx, node(lead), kid, api.SpawnRequest{Argv: []string{"x"}, DryRun: true})
+		wantStatus(t, err, http.StatusConflict, api.ErrConflict, "")
+	})
+}

@@ -123,7 +123,7 @@ func (c *Client) do(ctx context.Context, op operation, id api.LeaseID, query url
 		}
 		return e
 	}
-	if out == nil {
+	if out == nil || len(data) == 0 { // 204: a dry run, or nothing to return
 		return nil
 	}
 	return json.Unmarshal(data, out)
@@ -280,9 +280,13 @@ func (c *Client) Terminate(ctx context.Context, id api.LeaseID, req api.Terminat
 }
 
 // Kill ends a lease and its subtree at once.
-func (c *Client) Kill(ctx context.Context, id api.LeaseID) (api.Termination, error) {
+func (c *Client) Kill(ctx context.Context, id api.LeaseID, opts ...api.KillRequest) (api.Termination, error) {
 	var out api.Termination
-	return out, c.do(ctx, opKill, id, nil, nil, &out)
+	var body any
+	if len(opts) > 0 {
+		body = opts[0]
+	}
+	return out, c.do(ctx, opKill, id, nil, body, &out)
 }
 
 // WaitChildren waits for the subtree of a lease to end.

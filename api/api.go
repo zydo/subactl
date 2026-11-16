@@ -214,9 +214,10 @@ type Termination struct {
 
 // SpawnRequest is the body of POST /v1/leases/{id}/spawn.
 type SpawnRequest struct {
-	Argv []string `json:"argv"`
-	Env  []string `json:"env,omitempty"`
-	Dir  string   `json:"dir,omitempty"`
+	Argv   []string `json:"argv"`
+	Env    []string `json:"env,omitempty"`
+	Dir    string   `json:"dir,omitempty"`
+	DryRun bool     `json:"dry_run,omitempty"`
 }
 
 // SpawnResponse reports the main process of the lease.
@@ -231,6 +232,12 @@ type TerminateRequest struct {
 	GraceSeconds *float64 `json:"grace_seconds,omitempty"`
 	Code         int      `json:"code,omitempty"`
 	Recursive    bool     `json:"recursive,omitempty"`
+	DryRun       bool     `json:"dry_run,omitempty"`
+}
+
+// KillRequest is the optional body of POST /v1/leases/{id}/kill.
+type KillRequest struct {
+	DryRun bool `json:"dry_run,omitempty"`
 }
 
 // WaitChildrenRequest is the body of POST /v1/leases/{id}/wait-children.
@@ -330,6 +337,7 @@ var Schemas = map[string]any{
 	"SpawnRequest":         SpawnRequest{},
 	"SpawnResponse":        SpawnResponse{},
 	"TerminateRequest":     TerminateRequest{},
+	"KillRequest":          KillRequest{},
 	"WaitChildrenRequest":  WaitChildrenRequest{},
 	"WaitChildrenResponse": WaitChildrenResponse{},
 	"Suggestion":           Suggestion{},
@@ -358,6 +366,7 @@ const (
 type NotifyRequest struct {
 	Type   string `json:"type"`
 	Reason string `json:"reason,omitempty"`
+	DryRun bool   `json:"dry_run,omitempty"`
 }
 
 // ProgressRequest is a progress beacon reported by a harness adapter.

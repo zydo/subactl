@@ -476,6 +476,12 @@ func (m *Manager) Spawn(ctx context.Context, c Caller, id api.LeaseID, req api.S
 	if len(req.Argv) == 0 || req.Argv[0] == "" {
 		return api.SpawnResponse{}, invalid("argv", "a non-empty command", `["mini-agent","--task","t.md"]`, "argv is empty")
 	}
+	if req.DryRun {
+		if rt := m.runtime(ls.ID); rt == nil || rt.proc != nil || ls.State != api.StateAdmitted {
+			return api.SpawnResponse{}, apiErr(http.StatusConflict, api.ErrConflict, "lease %s is not waiting for its main process; a lease has exactly one", ls.ID)
+		}
+		return api.SpawnResponse{}, nil
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	rt := m.rt[ls.ID]
@@ -822,10 +828,14 @@ func (m *Manager) waitReaped(ctx context.Context, id api.LeaseID) (api.Terminati
 }
 
 // Kill ends the whole tree at once, recorded as 499.
-func (m *Manager) Kill(ctx context.Context, c Caller, id api.LeaseID) (api.Termination, error) {
+func (m *Manager) Kill(ctx context.Context, c Caller, id api.LeaseID, opts ...api.KillRequest) (api.Termination, error) {
+	dryRun := len(opts) > 0 && opts[0].DryRun
 	ls, err := m.resolve(c, id)
 	if err != nil {
 		return api.Termination{}, err
+	}
+	if dryRun {
+		return api.Termination{}, nil
 	}
 	m.reap(ls.ID, api.CodeKilled, map[string]any{"step": "kill"})
 	return m.terminated(ctx, ls.ID)
@@ -864,6 +874,9 @@ func (m *Manager) Terminate(ctx context.Context, c Caller, id api.LeaseID, req a
 			return api.Termination{}, invalid("grace_seconds", "0 to 3600", "30", "grace_seconds %v is out of range", *g)
 		}
 		grace = time.Duration(*g * float64(time.Second))
+	}
+	if req.DryRun {
+		return api.Termination{}, nil
 	}
 	m.mu.Lock()
 	rt := m.rt[ls.ID]
