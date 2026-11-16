@@ -34,6 +34,7 @@ type fakeGroup struct {
 	stuck    int   // processes that survive KillTree
 	mem      int64 // own usage, children excluded
 	ooms     int64 // times its own limit was hit
+	output   int64 // bytes of stdout and stderr
 	peak     int64
 	children map[api.LeaseID]bool
 }
@@ -371,4 +372,22 @@ func (f *Fake) OOM(lease api.LeaseID) {
 	g.ooms++
 	var rep KillReport
 	f.killLocked(g, &rep)
+}
+
+// SetOutput sets how much the lease has written to stdout and stderr.
+func (f *Fake) SetOutput(lease api.LeaseID, n int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.must(lease).output = n
+}
+
+// OutputBytes implements OutputMeter.
+func (f *Fake) OutputBytes(_ context.Context, g ACGroup) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fg, err := f.group(g)
+	if err != nil {
+		return 0, err
+	}
+	return fg.output, nil
 }

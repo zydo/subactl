@@ -405,6 +405,17 @@ func ownOOMs(dir string) int64 {
 	return vals["oom"]
 }
 
+// OutputBytes is the size of the lease's stdout and stderr files.
+func (b *Backend) OutputBytes(_ context.Context, g backend.ACGroup) (int64, error) {
+	var n int64
+	for _, name := range []string{"stdout", "stderr"} {
+		if info, err := os.Stat(filepath.Join(b.ScratchDir(g.Ref().Lease), name)); err == nil {
+			n += info.Size()
+		}
+	}
+	return n, nil
+}
+
 // SetLimits applies a changed envelope.
 func (b *Backend) SetLimits(_ context.Context, g backend.ACGroup, env api.Envelope) error {
 	dir, err := b.dir(g)

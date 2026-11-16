@@ -10,20 +10,22 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
 ## Status
 
 - **M0, contract and skeleton: done.** The contract, the public Go client,
-  the in-memory ledger, the lease lifecycle and the CLI run against a fake
-  backend that starts no processes and enforces nothing.
-- **M1, baseline: in progress.** `examples/mini-agent` is the demo harness,
-  so far only in `without` mode: children are plain processes and nothing
-  contains them. It exists to show that the problem reproduces before
-  anything is built to fix it.
-- Real enforcement on Linux cgroup v2 lands in M2.
+  the in-memory ledger, the lease lifecycle and the CLI.
+- **M1, baseline: done.** `examples/mini-agent` in `without` mode
+  reproduces the problem in five of five runs; see
+  [the results](examples/mini-agent/bench/results/README.md).
+- **M2, Linux enforcement core: done.** The cgroup v2 backend, the pre-exec
+  shim, nested leases, whole-group reaping, escape prevention and
+  fail-closed restart. Integration tests named after the acceptance
+  criteria (F1-F4, F11-F14, F33) run with `make integration`.
+- Next is M3: capacity tracking, the safety net, telemetry, audit and trace.
 
 ## Try it
 
 ```sh
 make build
 export SUBACTL_SOCK=/tmp/subactl.sock
-bin/subactld --backend fake --capacity 24G &
+bin/subactld --backend fake --capacity 24G &   # on Linux as root, drop --backend fake
 bin/subactl host
 bin/subactl run --wait=false --memory 8G -- agent     # prints the lead lease
 bin/subactl spawn --parent <lead> --memory 2G -- worker

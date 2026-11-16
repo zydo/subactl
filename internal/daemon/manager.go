@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -30,6 +31,8 @@ type Config struct {
 	DefaultGrace time.Duration
 	// TermWait is how long terminate waits after SIGTERM (default 10s).
 	TermWait time.Duration
+	// Tick is how often wall-time and output limits are checked (default 1s).
+	Tick time.Duration
 	// EscapeScan is how often escaped processes are looked for (default 5s).
 	EscapeScan time.Duration
 	Log        *slog.Logger
@@ -73,6 +76,7 @@ type runtime struct {
 	// while it is set, the exit is attributed to that terminate.
 	pending int
 	step    string
+	started time.Time // when the main process was spawned
 }
 
 // Manager owns every lease from acquire to reaped.
@@ -81,6 +85,10 @@ type Manager struct {
 	be  backend.Backend
 	led *ledger.Ledger
 	log *slog.Logger
+
+	// abandoned makes the manager inert, as if its process had been killed.
+	// Tests set it to model a daemon crash inside one process.
+	abandoned atomic.Bool
 
 	admit sync.Mutex // serialises ledger-plus-backend changes to reservations
 	mu    sync.Mutex
@@ -97,6 +105,9 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 	if cfg.TermWait == 0 {
 		cfg.TermWait = 10 * time.Second
 	}
+	if cfg.Tick == 0 {
+		cfg.Tick = time.Second
+	}
 	if cfg.EscapeScan == 0 {
 		cfg.EscapeScan = 5 * time.Second
 	}
@@ -110,10 +121,57 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 	if err := m.failClosed(ctx); err != nil {
 		return nil, err
 	}
+	go m.limitLoop(ctx)
 	if sc, ok := m.be.(backend.EscapeScanner); ok {
 		go m.escapeLoop(ctx, sc)
 	}
 	return m, nil
+}
+
+// limitLoop enforces the two limits the kernel does not: wall time and
+// output. Both are checked once per tick, so a lease can overrun by up to
+// one tick; that is the "soft" in the design's table.
+func (m *Manager) limitLoop(ctx context.Context) {
+	tick := time.NewTicker(m.cfg.Tick)
+	defer tick.Stop()
+	meter, _ := m.be.(backend.OutputMeter)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+		type running struct {
+			id      api.LeaseID
+			group   backend.ACGroup
+			started time.Time
+		}
+		var live []running
+		m.mu.Lock()
+		for id, rt := range m.rt {
+			if rt.proc != nil {
+				live = append(live, running{id, rt.group, rt.started})
+			}
+		}
+		m.mu.Unlock()
+		for _, r := range live {
+			ls, ok := m.led.Get(r.id)
+			if !ok || ls.State != api.StateRunning {
+				continue
+			}
+			if wall := ls.Envelope.Wall; wall > 0 {
+				if elapsed := time.Since(r.started); elapsed >= time.Duration(wall)*time.Second {
+					go m.reap(r.id, api.CodeWallExceeded, map[string]any{"wall_limit_seconds": wall, "elapsed_seconds": elapsed.Seconds()})
+					continue
+				}
+			}
+			if limit := ls.Envelope.Output; limit > 0 && meter != nil {
+				if n, err := meter.OutputBytes(ctx, r.group); err == nil && n > limit {
+					go m.reap(r.id, api.CodeOutputExceeded, map[string]any{"output_limit_bytes": limit, "output_bytes": n})
+				}
+			}
+		}
+	}
 }
 
 // escapeLoop looks every few seconds for processes that left their acgroup
@@ -392,7 +450,7 @@ func (m *Manager) Spawn(ctx context.Context, c Caller, id api.LeaseID, req api.S
 		go m.reap(ls.ID, api.CodeSubactlInternal, map[string]any{"spawn_error": err.Error()})
 		return api.SpawnResponse{}, apiErr(http.StatusInternalServerError, api.ErrInternal, "spawn: %v", err)
 	}
-	rt.proc = proc
+	rt.proc, rt.started = proc, time.Now()
 	go m.onMainExit(ls.ID, proc.Wait)
 	return api.SpawnResponse{Pid: proc.Pid()}, nil
 }
@@ -449,6 +507,9 @@ func (m *Manager) oomLimitHit(id api.LeaseID) (api.LeaseID, int64) {
 // reap ends a lease and its whole subtree. It is safe to call from several
 // goroutines for the same lease: the ledger lets only the first cause win.
 func (m *Manager) reap(id api.LeaseID, code int, evidence map[string]any) {
+	if m.abandoned.Load() {
+		return
+	}
 	// admit is held so that every marked lease has finished Acquire and has
 	// its runtime; a child caught mid-creation is either complete or absent.
 	m.admit.Lock()
@@ -523,6 +584,12 @@ func (m *Manager) record(ls api.Lease, code int, u api.Usage, ev map[string]any)
 	case api.CodeOOMLeaseLimit:
 		t.Dimension = "memory"
 		t.Message = fmt.Sprintf("%s exceeded its memory hard limit of %s and was killed as a whole.", who, api.FormatBytes(ls.Envelope.Memory))
+	case api.CodeWallExceeded:
+		t.Dimension = "wall"
+		t.Message = fmt.Sprintf("%s ran longer than its wall-time limit of %ds and was killed as a whole.", who, ls.Envelope.Wall)
+	case api.CodeOutputExceeded:
+		t.Dimension = "output"
+		t.Message = fmt.Sprintf("%s wrote more than its output limit of %s and was killed as a whole.", who, api.FormatBytes(ls.Envelope.Output))
 	case api.CodeEscapeDetected:
 		t.Message = who + " had a process outside its acgroup; the process was killed and the lease ended."
 	case api.CodeCompleted:

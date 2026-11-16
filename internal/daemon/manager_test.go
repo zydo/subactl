@@ -26,7 +26,10 @@ func node(id api.LeaseID) Caller { return Caller{Lease: id, UID: 501} }
 func newManager(t *testing.T) (*Manager, *backend.Fake) {
 	t.Helper()
 	f := backend.NewFake()
-	m, err := NewManager(ctx, Config{Backend: f, Capacity: 32 * gib})
+	// The manager's background loops end with the test.
+	mctx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+	m, err := NewManager(mctx, Config{Backend: f, Capacity: 32 * gib})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -614,4 +617,57 @@ func TestHolderDeathReapsLead(t *testing.T) {
 	if h := m.Host(); h.Allocated != 0 {
 		t.Fatalf("a lead without a holder kept %d bytes", h.Allocated)
 	}
+}
+
+// F10 for 408 and 414: the wall-time and output limits end the lease with
+// their own codes, and a raised limit takes effect.
+func TestWallAndOutputLimits(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m, f := newManager(t)
+		acquire := func(e api.Envelope) api.LeaseID {
+			ls, err := m.Acquire(ctx, operator, api.AcquireRequest{Envelope: e})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := m.Spawn(ctx, operator, ls.ID, api.SpawnRequest{Argv: []string{"agent"}}); err != nil {
+				t.Fatal(err)
+			}
+			return ls.ID
+		}
+		began := time.Now()
+		slow := acquire(api.Envelope{Memory: gib, Wall: 30})
+		patient := acquire(api.Envelope{Memory: gib, Wall: 30})
+		chatty := acquire(api.Envelope{Memory: gib, Output: 1000})
+		quiet := acquire(api.Envelope{Memory: gib, Output: 1000})
+		f.AddProcs(slow, 2)
+
+		// After ten seconds the planner gives one lease more time.
+		time.Sleep(10 * time.Second)
+		wall := int64(90)
+		if _, err := m.Resize(ctx, operator, patient, api.EnvelopePatch{Wall: &wall}); err != nil {
+			t.Fatal(err)
+		}
+		f.SetOutput(quiet, 1000) // exactly at the limit is allowed
+		f.SetOutput(chatty, 1001)
+
+		term, _ := m.waitReaped(ctx, chatty)
+		if term.Code != api.CodeOutputExceeded || term.Dimension != "output" || time.Since(began) > 12*time.Second {
+			t.Fatalf("chatty after %v: %+v", time.Since(began), term)
+		}
+		term, _ = m.waitReaped(ctx, slow)
+		if term.Code != api.CodeWallExceeded || term.Dimension != "wall" || term.Evidence["reaped_pids"] != 3 {
+			t.Fatalf("slow: %+v", term)
+		}
+		if took := time.Since(began); took < 30*time.Second || took > 31*time.Second {
+			t.Fatalf("the wall limit fired after %v, want 30s plus at most one tick", took)
+		}
+		term, _ = m.waitReaped(ctx, patient)
+		if took := time.Since(began); term.Code != api.CodeWallExceeded || took < 90*time.Second || took > 91*time.Second {
+			t.Fatalf("patient after %v: %+v", took, term)
+		}
+		if ls, _ := m.Get(ctx, operator, quiet); ls.State != api.StateRunning {
+			t.Fatalf("a lease at its output limit was killed: %+v", ls)
+		}
+		m.Kill(ctx, operator, quiet)
+	})
 }

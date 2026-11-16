@@ -59,6 +59,12 @@ type EscapeScanner interface {
 	ScanEscapes(ctx context.Context) ([]Escape, error)
 }
 
+// OutputMeter is implemented by backends that capture a lease's stdout and
+// stderr and can say how much was written.
+type OutputMeter interface {
+	OutputBytes(ctx context.Context, g ACGroup) (int64, error)
+}
+
 // ExitStatus is how a main process ended. Signal is zero for a normal exit.
 type ExitStatus struct {
 	Code   int

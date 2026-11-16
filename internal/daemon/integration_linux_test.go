@@ -194,7 +194,7 @@ func TestIntegrationF14Nesting(t *testing.T) {
 	e := newEnv(t)
 	lead := e.run(e.op, 512*mib, "exec sleep 600")
 	kid := e.run(node(lead), 128*mib, "exec sleep 600")
-	grandkid := e.run(node(kid), 64*mib, "head -c 20000000 /dev/zero | tail & exec sleep 600")
+	grandkid := e.run(node(kid), 64*mib, "x=$(head -c 20000000 /dev/zero | tr '\\0' x); sleep 600") // the shell holds about 20MB
 	for _, p := range []string{string(lead), filepath.Join(string(lead), string(kid)), filepath.Join(string(lead), string(kid), string(grandkid))} {
 		procs, err := os.ReadFile(filepath.Join(e.base, p, "_self", "cgroup.procs"))
 		if err != nil || len(strings.Fields(string(procs))) == 0 {
@@ -420,7 +420,10 @@ func TestIntegrationF12FailClosed(t *testing.T) {
 	eventually(t, 5*time.Second, "the old tree is running", func() bool { return len(pidsWith("sleep 31337.4")) == 2 })
 	kidDir := filepath.Join(e.base, string(lead), string(kid))
 
-	e.stop() // the daemon "crashes": nothing is told, nothing is cleaned up
+	// The daemon "crashes": nothing is told, nothing is cleaned up, and
+	// from here on it reacts to nothing.
+	e.m.abandoned.Store(true)
+	e.stop()
 	// With no daemon, the kernel still enforces the kid's 48MiB limit.
 	eventually(t, 30*time.Second, "the kernel enforced the limit while the daemon was down", func() bool {
 		data, _ := os.ReadFile(filepath.Join(kidDir, "memory.events"))
@@ -509,4 +512,48 @@ func (m *Manager) mustRun(t *testing.T, c Caller, envl api.Envelope, script stri
 		t.Fatal(err)
 	}
 	return ls.ID
+}
+
+// F11 and the 408 half of F10: a lease that writes past its output limit
+// is killed as a whole with 414, having written no more than the limit
+// plus about one tick of output; a lease past its wall time ends with 408.
+func TestIntegrationF11OutputAndWall(t *testing.T) {
+	e := newEnv(t)
+	const limit = 4 * mib
+	// About 1MiB per 100ms, so one 1s tick is roughly 10MiB of overrun.
+	chatty := e.m.mustRun(t, e.op, api.Envelope{Memory: 64 * mib, Output: limit},
+		"setsid nohup sleep 31337.5 >/dev/null 2>&1 & while :; do head -c 1048576 /dev/zero | tr '\\0' x; sleep 0.1; done")
+	out := filepath.Join(e.be.ScratchDir(chatty), "stdout")
+	var size int64
+	done := make(chan api.Termination, 1)
+	go func() { done <- e.wait(chatty, 15*time.Second) }()
+	var term api.Termination
+	for term.Code == 0 {
+		select {
+		case term = <-done:
+		default:
+			if info, err := os.Stat(out); err == nil {
+				size = info.Size() // the file is removed with the lease; keep the last size seen
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if term.Code != api.CodeOutputExceeded || term.Dimension != "output" {
+		t.Fatalf("%+v", term)
+	}
+	if size <= limit || size > limit+16*mib {
+		t.Fatalf("the lease wrote %d bytes against a limit of %d; want the limit plus at most about one second of output", size, limit)
+	}
+	if left := pidsWith("sleep 31337.5"); len(left) != 0 {
+		t.Fatalf("descendants survived the output kill: %v", left)
+	}
+
+	began := time.Now()
+	slow := e.m.mustRun(t, e.op, api.Envelope{Memory: 64 * mib, Wall: 2}, "exec sleep 600")
+	if term := e.wait(slow, 10*time.Second); term.Code != api.CodeWallExceeded || term.Dimension != "wall" {
+		t.Fatalf("%+v", term)
+	}
+	if took := time.Since(began); took < 2*time.Second || took > 4*time.Second {
+		t.Fatalf("the wall limit of 2s fired after %v", took)
+	}
 }
