@@ -1,0 +1,9 @@
+# A short, well-behaved radix run: three packages, nothing greedy. It checks
+# that the task environment works before the real scenario is run.
+seed: 1
+task: radix
+fanout: 3
+depth: 2
+max_packages: 3
+duration: 4m
+fanout_at: 5s

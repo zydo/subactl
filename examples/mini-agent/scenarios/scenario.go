@@ -45,6 +45,14 @@ type Scenario struct {
 	QuotaFor        time.Duration // how long calls keep failing; zero disables G4
 	OutputRunawayAt time.Duration // G5 begins
 
+	// External interference, run by the bench and not by any agent: a
+	// process outside the agent tree takes InterferenceShare of the
+	// capacity within InterferenceRamp and holds it for InterferenceFor.
+	InterferenceAt    time.Duration
+	InterferenceRamp  time.Duration
+	InterferenceFor   time.Duration // zero disables it
+	InterferenceShare float64
+
 	LeaveServers      bool // G2: dev servers and browsers are not stopped
 	OutputRunaway     bool // G5: one worker writes output without end
 	UnboundedParallel bool // G6: tsc and tests at 4x the core count, unbounded file walks
@@ -91,6 +99,10 @@ func Parse(data []byte) (*Scenario, error) {
 	d.dur("quota_at", &sc.QuotaAt)
 	d.dur("quota_for", &sc.QuotaFor)
 	d.dur("output_runaway_at", &sc.OutputRunawayAt)
+	d.dur("interference_at", &sc.InterferenceAt)
+	d.dur("interference_ramp", &sc.InterferenceRamp)
+	d.dur("interference_for", &sc.InterferenceFor)
+	d.float("interference_share", &sc.InterferenceShare)
 	if g, ok := d.take("greedy").(map[string]any); ok {
 		gd := decoder{m: g, prefix: "greedy."}
 		gd.bool("leave_servers", &sc.LeaveServers)
@@ -113,6 +125,8 @@ func Parse(data []byte) (*Scenario, error) {
 		return nil, fmt.Errorf("duration is required, e.g. 15m")
 	case sc.FailRate < 0 || sc.FailRate > 1:
 		return nil, fmt.Errorf("fail_rate must be between 0 and 1")
+	case sc.InterferenceShare < 0 || sc.InterferenceShare >= 1:
+		return nil, fmt.Errorf("interference_share must be at least 0 and below 1")
 	}
 	if _, err := fs.Stat(files, "files/"+sc.Task); err != nil {
 		return nil, fmt.Errorf("unknown task %q", sc.Task)
@@ -315,11 +329,10 @@ func (sc *Scenario) Script(task string, depth int) ([]llm.Step, error) {
 		return []llm.Step{
 			{Say: "Setting up a worktree for " + pkg + ".", Tool: "bash", Input: bash(`"$TASK_DIR/setup.sh"`, step)},
 			{Say: "Type-checking.", Tool: "bash", Input: bash(`"$TASK_DIR/typecheck.sh"`, step)},
-			{Say: "Running the tests.", Tool: "bash", Input: bash(test+` && echo ok > "$WORK/status.test"`, 2*step)},
-			{Say: "Starting the dev server and a browser.", Tool: "bash", Input: bash(`"$TASK_DIR/preview.sh"`, step)},
-			{Say: "Comparing screenshots of the stories.", Tool: "bash", Input: bash(`"$TASK_DIR/screenshot.sh"`, step)},
-			{Say: "Stopping the dev server and the browser.", Tool: "bash", Input: bash(`"$TASK_DIR/cleanup.sh"`, time.Minute)},
-			{Say: "Wrapping up.", Tool: "bash", Input: bash(`"$TASK_DIR/finish.sh" setup typecheck test preview screenshot`, time.Minute)},
+			{Say: "Starting the dev server to look at the stories.", Tool: "bash", Input: bash(`"$TASK_DIR/preview.sh"`, step)},
+			{Say: "Running the tests and checking the stories in a browser.", Tool: "bash", Input: bash(test+` && echo ok > "$WORK/status.test"`, 2*step)},
+			{Say: "Stopping the dev server.", Tool: "bash", Input: bash(`"$TASK_DIR/cleanup.sh"`, time.Minute)},
+			{Say: "Wrapping up.", Tool: "bash", Input: bash(`"$TASK_DIR/finish.sh" setup typecheck preview test`, time.Minute)},
 		}, nil
 	case "fix":
 		if pkg == "" {

@@ -1,0 +1,21 @@
+# The demo scenario: upgrade radix-ui/primitives to React 19, greedily.
+# Times follow the design's fault-injection schedule.
+seed: 1
+task: radix
+fanout: 32             # G1: one worker per package, up to 32 at once
+depth: 3               # G1: failing tests recurse into fixers, three levels deep
+leak_mb: 8             # G3: every agent's transcript buffer grows 8MB per step
+fail_rate: 0.3
+duration: 15m
+fanout_at: 2m          # G1 fan-out begins
+quota_at: 5m           # G4: the usage limit; the harness SIGKILLs subagent pids only
+quota_for: 20s
+interference_at: 7m    # a process that is not an agent takes 30% of capacity
+interference_ramp: 30s
+interference_for: 4m
+interference_share: 0.3
+output_runaway_at: 9m  # G5
+greedy:
+  leave_servers: true       # G2: dev servers and browsers are never stopped
+  output_runaway: true      # G5: one worker writes output without end
+  unbounded_parallel: true  # G6: tsc and tests at 4x the cores, unbounded file walk

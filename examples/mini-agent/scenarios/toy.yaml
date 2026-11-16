@@ -1,0 +1,24 @@
+# The toy task needs no toolchain: its steps are sleeps. It exercises the
+# harness, the scripted brain and the bench on any machine.
+seed: 7
+task: toy
+fanout: 6
+depth: 3
+fail_rate: 0.5
+leak_mb: 4
+duration: 40s
+fanout_at: 2s
+quota_at: 8s
+quota_for: 3s
+interference_at: 15s
+interference_ramp: 3s
+interference_for: 10s
+interference_share: 0.3
+output_runaway_at: 20s
+greedy:
+  leave_servers: true
+  output_runaway: true
+env:
+  TOY_PACKAGES: 8
+  TOY_STEP: 1
+  TOY_SERVER_LIFE: 600
