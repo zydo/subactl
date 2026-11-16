@@ -22,8 +22,15 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
   external load, the capacity-shrunk state, the safety net, NEAR_LIMIT,
   wall-time and output limits, the audit log, quota suggestions,
   Prometheus metrics and per-lease traces (F5-F11, F30, F32).
-- Next is M4: the lead's pty, self-wrapping, the inbox, graceful
-  termination, progress beacons and idle detection.
+- **M4, agent tree and communication: done** except where noted below.
+  The lead's terminal and `subactl run -it`, mini-agent's self-wrapping
+  and adapter, identity by cgroup membership, the inbox, graceful
+  termination, declared policies, progress beacons, idle detection,
+  `subactl top`, and the skill in [skill/subactl.md](skill/subactl.md).
+- **M5, experiments: running.** Groups B and C run under subactl in the
+  same chamber; `bench report` judges the four hypotheses from the data.
+- Not done: the macOS monitor and Windows backends (M6), the real-brain
+  demo, and an automated test of multi-lead CPU fairness (F27).
 
 ## Try it
 
@@ -50,10 +57,17 @@ memory cap, and measures what happens.
 # The toy task needs no toolchain and runs anywhere.
 bin/mini-agent --mode without --scenario examples/mini-agent/scenarios/toy.yaml
 
+# Under subactl: start the daemon (root, Linux), then run the lead.
+sudo bin/subactld --socket-group "$(id -gn)" &
+bin/mini-agent --mode with --scenario examples/mini-agent/scenarios/toy.yaml
+bin/subactl top
+
 # Group A on the real task (radix-ui/primitives to React 19), five runs,
 # in a Docker chamber capped at 12G. Needs Docker; the first run prepares
 # the task environment.
-examples/mini-agent/bench/chamber/run.sh A examples/mini-agent/scenarios/radix.yaml 5 /tmp/bench-a
+examples/mini-agent/bench/chamber/run.sh A examples/mini-agent/scenarios/radix.yaml 5 /tmp/bench/A
+# ... the same for B and C, then:
+bin/bench report --in /tmp/bench
 ```
 
 ## Develop

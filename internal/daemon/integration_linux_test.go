@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"os/user"
@@ -27,6 +28,7 @@ import (
 	"github.com/zydo/subactl/internal/backend"
 	"github.com/zydo/subactl/internal/backend/cgroup2"
 	"github.com/zydo/subactl/internal/capacity"
+	"github.com/zydo/subactl/internal/pty"
 	"github.com/zydo/subactl/internal/telemetry"
 )
 
@@ -765,5 +767,105 @@ func TestIntegrationF8SafetyNet(t *testing.T) {
 	}
 	if h, _ := (capacity.CgroupReader{Dir: e.outer}).Read(); h.Available < 160*mib {
 		t.Fatalf("available memory is still below the line: %d", h.Available)
+	}
+}
+
+// F24 on the real backend: a child's scratch directory, with its result
+// and its output, can be read by the parent after the child is reaped, and
+// is gone once the parent has ended. A result outside it is refused.
+func TestIntegrationF24Scratch(t *testing.T) {
+	e := newEnv(t)
+	lead := e.run(e.op, 256*mib, "exec sleep 600")
+	kid := e.run(node(lead), 64*mib, `echo "to stdout"; echo '{"status":"ok"}' > $SUBACTL_SCRATCH/result.json; exec sleep 600`)
+	scratch := e.be.ScratchDir(kid)
+	result := filepath.Join(scratch, "result.json")
+	eventually(t, 5*time.Second, "the child wrote its result", func() bool {
+		_, err := os.Stat(result)
+		return err == nil
+	})
+	ls, err := e.m.Get(context.Background(), node(lead), kid)
+	if err != nil || ls.Scratch != scratch {
+		t.Fatalf("lease %+v, %v", ls, err)
+	}
+	if err := e.m.Progress(node(kid), api.Self, api.ProgressRequest{State: "done", Result: "/etc/passwd"}); err == nil {
+		t.Fatal("a result outside the scratch directory was accepted")
+	}
+	if err := e.m.Progress(node(kid), api.Self, api.ProgressRequest{State: "done", Result: result}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.m.Kill(context.Background(), node(lead), kid); err != nil {
+		t.Fatal(err)
+	}
+	// The parent runs as the same unprivileged user: check as that user.
+	read := exec.Command("cat", result, filepath.Join(scratch, "stdout"))
+	read.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uint32(e.uid), Gid: uint32(e.uid)}}
+	out, err := read.Output()
+	if err != nil || !strings.Contains(string(out), `{"status":"ok"}`) || !strings.Contains(string(out), "to stdout") {
+		t.Fatalf("the parent cannot read the reaped child's scratch: %v: %q", err, out)
+	}
+	if _, err := e.m.Kill(context.Background(), e.op, lead); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []api.LeaseID{kid, lead} {
+		if _, err := os.Stat(e.be.ScratchDir(id)); !os.IsNotExist(err) {
+			t.Fatalf("scratch of %s remains after the lead ended: %v", id, err)
+		}
+	}
+}
+
+// F25, the terminal half, on the real backend: a lead asked for with a tty
+// runs on a real terminal as the unprivileged user, sees the window size
+// the client sends, receives what is typed, and its output comes back.
+func TestIntegrationF25LeadTerminal(t *testing.T) {
+	e := newEnv(t)
+	ls, err := e.m.Acquire(context.Background(), e.op, api.AcquireRequest{TTY: true, Envelope: api.Envelope{Memory: 64 * mib}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := `test -t 0 && test -t 1 && echo is-a-tty; id -u; read line; stty size; echo "typed:$line"; cat /proc/self/cgroup`
+	_, err = e.m.Spawn(context.Background(), e.op, ls.ID, api.SpawnRequest{Argv: []string{"/bin/sh", "-c", script}, Env: []string{"PATH=/usr/local/bin:/usr/bin:/bin"}, Dir: "/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, server := net.Pipe()
+	attached := make(chan error, 1)
+	go func() { attached <- e.m.Attach(e.op, ls.ID, server) }()
+	// A node inside the tree cannot attach to a terminal.
+	if err := e.m.Attach(node(ls.ID), ls.ID, server); err == nil {
+		t.Fatal("a lease attached to a terminal")
+	}
+	var out strings.Builder
+	read := make(chan struct{})
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := client.Read(buf)
+			out.Write(buf[:n])
+			if err != nil {
+				close(read)
+				return
+			}
+		}
+	}()
+	if err := pty.WriteFrame(client, pty.FrameResize, pty.ResizePayload(41, 133)); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if err := pty.WriteFrame(client, pty.FrameData, []byte("hello lead\n")); err != nil {
+		t.Fatal(err)
+	}
+	if term := e.wait(ls.ID, 10*time.Second); term.Code != api.CodeCompleted {
+		t.Fatalf("%+v", term)
+	}
+	if err := <-attached; err != nil {
+		t.Fatal(err)
+	}
+	server.Close()
+	<-read
+	got := strings.ReplaceAll(out.String(), "\r", "")
+	for _, want := range []string{"is-a-tty\n", strconv.Itoa(e.uid) + "\n", "41 133\n", "typed:hello lead\n", "0::/\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the terminal output lacks %q:\n%s", want, got)
+		}
 	}
 }
