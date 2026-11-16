@@ -1,7 +1,7 @@
 # The only contract of subactld. Everything that talks to the daemon (the
 # subactl CLI, the Go client, subactl top) depends on this file alone.
 #
-# This file is written in the YAML subset that internal/yamlite parses:
+# This file is written in the YAML subset that yamlite parses:
 # block maps, block lists, single-line flow lists of scalars, and plain or
 # quoted scalars. No anchors, tags, block scalars or multiple documents.
 openapi: 3.0.3

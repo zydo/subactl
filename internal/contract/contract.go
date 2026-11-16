@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/zydo/subactl/api"
-	"github.com/zydo/subactl/internal/yamlite"
+	"github.com/zydo/subactl/yamlite"
 )
 
 // Operation is one method on one path.
