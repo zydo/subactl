@@ -179,6 +179,7 @@ type liveLease struct {
 	group   backend.ACGroup
 	started time.Time
 	running bool
+	tty     *ttyRelay
 }
 
 // sampleAll samples every live lease and acts on what the samples show.
@@ -187,7 +188,7 @@ func (m *Manager) sampleAll(ctx context.Context) map[api.LeaseID]int64 {
 	var live []liveLease
 	m.mu.Lock()
 	for id, rt := range m.rt {
-		live = append(live, liveLease{id, rt.group, rt.started, rt.proc != nil})
+		live = append(live, liveLease{id, rt.group, rt.started, rt.proc != nil, rt.tty})
 	}
 	m.mu.Unlock()
 	meter, _ := m.be.(backend.OutputMeter)
@@ -212,7 +213,13 @@ func (m *Manager) sampleAll(ctx context.Context) map[api.LeaseID]int64 {
 				continue
 			}
 		}
-		if limit := ls.Envelope.Output; limit > 0 && meter != nil {
+		if limit := ls.Envelope.Output; limit > 0 && r.tty != nil {
+			// A lead writes to its terminal, not to files: what was relayed
+			// is what counts.
+			if n := r.tty.bytes.Load(); n > limit {
+				go m.reap(r.id, api.CodeOutputExceeded, map[string]any{"output_limit_bytes": limit, "output_bytes": n})
+			}
+		} else if limit > 0 && meter != nil {
 			if n, err := meter.OutputBytes(ctx, r.group); err == nil && n > limit {
 				go m.reap(r.id, api.CodeOutputExceeded, map[string]any{"output_limit_bytes": limit, "output_bytes": n})
 			}

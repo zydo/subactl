@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/zydo/subactl/api"
 )
@@ -35,7 +37,8 @@ func SocketFromEnv() string {
 
 // Client talks to one subactld.
 type Client struct {
-	http *http.Client
+	http   *http.Client
+	socket string
 }
 
 // New returns a client for the daemon listening on the Unix socket at path.
@@ -46,7 +49,7 @@ func New(socket string) *Client {
 			return d.DialContext(ctx, "unix", socket)
 		},
 	}
-	return &Client{http: &http.Client{Transport: tr}}
+	return &Client{http: &http.Client{Transport: tr}, socket: socket}
 }
 
 // operation is one operation of the contract.
@@ -72,6 +75,7 @@ var (
 	opProgress     = operation{"reportProgress", "POST", "/v1/leases/{id}/progress"}
 	opResizeAsk    = operation{"requestResize", "POST", "/v1/leases/{id}/resize-request"}
 	opStreamInbox  = operation{"streamInbox", "GET", "/v1/leases/{id}/inbox"}
+	opAttach       = operation{"attach", "GET", "/v1/leases/{id}/attach"}
 
 	// operations lists what the client implements; the conformance test
 	// compares it with the contract.
@@ -79,7 +83,7 @@ var (
 		opGetHost, opCreateLease, opListLeases, opGetLease, opResizeLease,
 		opGetAvailable, opSpawn, opTerminate, opKill, opWaitChildren,
 		opGetTrace, opStreamEvents, opGetMetrics,
-		opNotify, opProgress, opResizeAsk, opStreamInbox,
+		opNotify, opProgress, opResizeAsk, opStreamInbox, opAttach,
 	}
 )
 
@@ -285,4 +289,71 @@ func (c *Client) Kill(ctx context.Context, id api.LeaseID) (api.Termination, err
 func (c *Client) WaitChildren(ctx context.Context, id api.LeaseID, req api.WaitChildrenRequest) (api.WaitChildrenResponse, error) {
 	var out api.WaitChildrenResponse
 	return out, c.do(ctx, opWaitChildren, id, nil, req, &out)
+}
+
+// AttachProtocol is the Upgrade token of the lead's terminal relay.
+const AttachProtocol = "subactl-pty"
+
+// Terminal is an attached lead terminal. Reads yield the terminal's raw
+// output; input and window sizes are sent with Type and Resize.
+type Terminal struct {
+	conn net.Conn
+	r    *bufio.Reader
+	mu   sync.Mutex
+}
+
+// Read returns terminal output. It ends with io.EOF when the lead ends.
+func (t *Terminal) Read(p []byte) (int, error) { return t.r.Read(p) }
+
+// Close detaches. The lead keeps running for as long as its holder lives.
+func (t *Terminal) Close() error { return t.conn.Close() }
+
+func (t *Terminal) frame(typ byte, payload []byte) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	hdr := [5]byte{typ}
+	binary.BigEndian.PutUint32(hdr[1:], uint32(len(payload)))
+	_, err := t.conn.Write(append(hdr[:], payload...))
+	return err
+}
+
+// Type sends what the user typed.
+func (t *Terminal) Type(p []byte) error { return t.frame(0, p) }
+
+// Resize tells the lead the size of the user's terminal.
+func (t *Terminal) Resize(rows, cols uint16) error {
+	var b [4]byte
+	binary.BigEndian.PutUint16(b[:2], rows)
+	binary.BigEndian.PutUint16(b[2:], cols)
+	return t.frame(1, b[:])
+}
+
+// Attach connects to the terminal of a lead that was acquired with a tty.
+func (c *Client) Attach(ctx context.Context, id api.LeaseID) (*Terminal, error) {
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "unix", c.socket)
+	if err != nil {
+		return nil, fmt.Errorf("subactld: %w", err)
+	}
+	path := strings.ReplaceAll(opAttach.path, "{id}", url.PathEscape(string(id)))
+	if _, err := fmt.Fprintf(conn, "GET %s HTTP/1.1\r\nHost: subactld\r\nConnection: Upgrade\r\nUpgrade: %s\r\n\r\n", path, AttachProtocol); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("subactld: %w", err)
+	}
+	r := bufio.NewReader(conn)
+	resp, err := http.ReadResponse(r, nil)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("subactld: %w", err)
+	}
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		defer conn.Close()
+		data, _ := io.ReadAll(resp.Body)
+		e := &api.Error{}
+		if json.Unmarshal(data, e) != nil || e.Code == "" {
+			e = &api.Error{Code: api.ErrInternal, Message: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))}
+		}
+		return nil, e
+	}
+	return &Terminal{conn: conn, r: r}, nil
 }

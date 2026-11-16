@@ -50,7 +50,7 @@ func Routes() []Route {
 		{ID: "terminate", Method: "POST", Path: "/v1/leases/{id}/terminate", handler: (*Server).terminate},
 		{ID: "kill", Method: "POST", Path: "/v1/leases/{id}/kill", handler: (*Server).kill},
 		{ID: "waitChildren", Method: "POST", Path: "/v1/leases/{id}/wait-children", handler: (*Server).waitChildren},
-		{ID: "attach", Method: "GET", Path: "/v1/leases/{id}/attach", Pending: "M4"},
+		{ID: "attach", Method: "GET", Path: "/v1/leases/{id}/attach", handler: (*Server).attach},
 		{ID: "requestResize", Method: "POST", Path: "/v1/leases/{id}/resize-request", handler: (*Server).requestResize},
 		{ID: "notify", Method: "POST", Path: "/v1/leases/{id}/notify", handler: (*Server).notify},
 		{ID: "reportProgress", Method: "POST", Path: "/v1/leases/{id}/progress", handler: (*Server).reportProgress},
@@ -407,4 +407,35 @@ func (s *Server) streamInbox(w http.ResponseWriter, r *http.Request, c Caller) e
 			flusher.Flush()
 		}
 	}
+}
+
+// AttachProtocol is the Upgrade token of the lead's terminal relay.
+const AttachProtocol = "subactl-pty"
+
+// attach upgrades the connection to the raw terminal relay.
+func (s *Server) attach(w http.ResponseWriter, r *http.Request, c Caller) error {
+	if !strings.EqualFold(r.Header.Get("Upgrade"), AttachProtocol) {
+		return invalid("Upgrade", "the header Upgrade: "+AttachProtocol, AttachProtocol, "attach is a protocol upgrade, not a plain request")
+	}
+	if _, err := s.m.attachable(c, leaseID(r)); err != nil {
+		return err
+	}
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		return apiErr(http.StatusInternalServerError, api.ErrInternal, "this connection cannot be upgraded")
+	}
+	conn, rw, err := hj.Hijack()
+	if err != nil {
+		return apiErr(http.StatusInternalServerError, api.ErrInternal, "upgrade: %v", err)
+	}
+	defer conn.Close()
+	_, _ = rw.WriteString("HTTP/1.1 101 Switching Protocols\r\nUpgrade: " + AttachProtocol + "\r\nConnection: Upgrade\r\n\r\n")
+	_ = rw.Flush()
+	// Read through the buffered reader, which may already hold input, and
+	// write straight to the connection.
+	_ = s.m.Attach(c, leaseID(r), struct {
+		io.Reader
+		io.Writer
+	}{rw.Reader, conn})
+	return nil
 }

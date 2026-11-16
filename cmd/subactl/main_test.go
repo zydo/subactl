@@ -218,7 +218,7 @@ func TestCLIUsageErrors(t *testing.T) {
 	h := harness{t: t, socket: "/nonexistent/subactl.sock"}
 	for _, args := range [][]string{
 		{}, {"frobnicate"}, {"get"}, {"run", "--memory", "lots", "--", "x"}, {"run", "--memory", "1G"},
-		{"run", "-it", "--", "x"}, {"top"}, {"suggest"}, {"audit"}, {"trace"},
+		{"spawn", "-it", "--", "x"}, {"top"}, {"suggest"}, {"audit"}, {"trace"},
 	} {
 		if code, _, errs := h.cli(args...); code != 2 || errs == "" {
 			t.Errorf("subactl %v: exit %d, stderr %q; want exit 2 with a message", args, code, errs)
@@ -272,5 +272,60 @@ func TestStrictHTTP(t *testing.T) {
 	}
 	if refs, _ := f.List(context.Background()); len(refs) != 0 {
 		t.Fatal(fmt.Sprint("refused requests had side effects: ", refs))
+	}
+}
+
+// F25, the relay half: "run -it" shows what the lead writes to its
+// terminal and delivers what the user types, until the lead ends.
+func TestRunInteractive(t *testing.T) {
+	socket, f := daemonOnSocket(t)
+	typed, userEnd, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdin = typed
+	defer func() { stdin = os.Stdin }()
+
+	got := make(chan string, 1)
+	go func() {
+		// The "agent": find the lead, open its terminal, greet, read a line.
+		c := client.New(socket)
+		for range 400 {
+			leases, _ := c.Leases(context.Background(), "")
+			if len(leases) == 1 && leases[0].State == api.StateRunning {
+				slave, err := os.OpenFile(f.Slave(leases[0].ID), os.O_RDWR, 0)
+				if err != nil {
+					got <- "open slave: " + err.Error()
+					return
+				}
+				fmt.Fprint(slave, "ready> ")
+				fmt.Fprintln(userEnd, "hello agent") // the user types a line
+				buf := make([]byte, 256)
+				n, _ := slave.Read(buf)
+				fmt.Fprintf(slave, "you said: %s", buf[:n])
+				slave.Close()
+				got <- strings.TrimSpace(string(buf[:n]))
+				time.Sleep(100 * time.Millisecond)
+				f.Exit(leases[0].ID, backend.ExitStatus{})
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		got <- "the lead never started"
+	}()
+	args := []string{"--socket", socket, "run", "-it", "--memory", "1G"}
+	if os.Getuid() == 0 {
+		args = append(args, "--uid", "1000")
+	}
+	var out, errs bytes.Buffer
+	code := run(append(args, "--", "agent"), &out, &errs)
+	if line := <-got; line != "hello agent" {
+		t.Fatalf("the agent read %q from its terminal", line)
+	}
+	if code != 0 || !strings.Contains(out.String(), "ready> ") || !strings.Contains(out.String(), "you said: hello agent") {
+		t.Fatalf("exit %d\nstdout %q\nstderr %q", code, out.String(), errs.String())
+	}
+	if !strings.Contains(errs.String(), "200 COMPLETED") {
+		t.Fatalf("stderr %q", errs.String())
 	}
 }

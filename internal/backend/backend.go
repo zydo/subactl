@@ -7,6 +7,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"os"
 	"syscall"
 
 	"github.com/zydo/subactl/api"
@@ -57,6 +58,13 @@ type Escape struct {
 // boundary: clearing the environment defeats it.
 type EscapeScanner interface {
 	ScanEscapes(ctx context.Context) ([]Escape, error)
+}
+
+// TTYProc is implemented by the main process of a lease that was given a
+// pseudo-terminal. TTY returns the master end, which the daemon relays to
+// the lead's terminal; it is nil for a headless process.
+type TTYProc interface {
+	TTY() *os.File
 }
 
 // OutputMeter is implemented by backends that capture a lease's stdout and

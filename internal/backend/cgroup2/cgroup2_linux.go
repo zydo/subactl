@@ -32,6 +32,7 @@ import (
 
 	"github.com/zydo/subactl/api"
 	"github.com/zydo/subactl/internal/backend"
+	"github.com/zydo/subactl/internal/pty"
 )
 
 const (
@@ -243,12 +244,16 @@ func (b *Backend) ScratchDir(lease api.LeaseID) string {
 }
 
 type proc struct {
+	tty    *os.File
 	cmd    *exec.Cmd
 	once   sync.Once
 	status backend.ExitStatus
 }
 
 func (p *proc) Pid() int { return p.cmd.Process.Pid }
+
+// TTY returns the master end of the lead's pseudo-terminal, or nil.
+func (p *proc) TTY() *os.File { return p.tty }
 
 func (p *proc) Wait() backend.ExitStatus {
 	p.once.Do(func() {
@@ -328,10 +333,34 @@ func (b *Backend) Spawn(_ context.Context, g backend.ACGroup, c backend.Cmd) (ba
 		Unshareflags: unix.CLONE_NEWCGROUP,
 		Setsid:       true,
 	}
+	// A lead gets a pseudo-terminal in place of the output files: the
+	// daemon keeps the master end and relays it to "subactl run -it".
+	var master *os.File
+	if c.TTY {
+		pair, err := pty.Open()
+		if err != nil {
+			return nil, fmt.Errorf("cgroup2: %w", err)
+		}
+		slave, err := os.OpenFile(pair.Slave, os.O_RDWR|unix.O_NOCTTY, 0)
+		if err == nil {
+			err = os.Chown(pair.Slave, c.UID, gid)
+		}
+		if err != nil {
+			pair.Master.Close()
+			return nil, fmt.Errorf("cgroup2: pty slave: %w", err)
+		}
+		defer slave.Close()
+		master = pair.Master
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
+		cmd.SysProcAttr.Setctty = true // fd 0 becomes the controlling terminal
+	}
 	if err := cmd.Start(); err != nil {
+		if master != nil {
+			master.Close()
+		}
 		return nil, fmt.Errorf("cgroup2: spawn in %s: %w", lease, err)
 	}
-	return &proc{cmd: cmd}, nil
+	return &proc{cmd: cmd, tty: master}, nil
 }
 
 func readInt(path string) int64 {

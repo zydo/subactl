@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/zydo/subactl/api"
 	"github.com/zydo/subactl/client"
 )
@@ -53,6 +55,9 @@ var pending = map[string]string{
 	"top": "M4",
 }
 
+// stdin is where "run -it" reads what the user types; tests replace it.
+var stdin io.Reader = os.Stdin
+
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -74,7 +79,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	c := &cli{api: client.New(*socket), out: stdout, err: stderr}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
 
 	handlers := map[string]func(context.Context, []string) (int, error){
@@ -238,18 +243,18 @@ func (c *cli) start(ctx context.Context, name string, args []string) (int, error
 	uid := fs.Int("uid", -1, "uid the lead runs as (required when the operator is root)")
 	parent := fs.String("parent", "", "parent lease (default: the caller's own lease)")
 	wait := fs.Bool("wait", name == "run", "block until the lease ends and print its termination record")
-	interactive := fs.Bool("it", false, "attach a pty to the lead")
+	interactive := fs.Bool("it", false, "give the lead a terminal and relay it to this one, like docker run -it")
 	if err := fs.Parse(args); err != nil {
 		return 2, err
 	}
-	if *interactive {
-		return 2, errors.New("-it (the lead's pty) lands in milestone M4")
+	if *interactive && name != "run" {
+		return 2, errors.New("-it attaches a terminal to a lead; child agents are headless")
 	}
 	argv := fs.Args()
 	if len(argv) == 0 && !*dryRun {
 		return 2, fmt.Errorf("no command given; usage: subactl %s [flags] -- CMD ARGS", name)
 	}
-	req := api.AcquireRequest{Kind: *kind, Envelope: env.envelope(), DryRun: *dryRun}
+	req := api.AcquireRequest{Kind: *kind, Envelope: env.envelope(), DryRun: *dryRun, TTY: *interactive}
 	if name == "spawn" {
 		req.Parent = api.LeaseID(*parent)
 	} else if *parent != "" {
@@ -285,6 +290,9 @@ func (c *cli) start(ctx context.Context, name string, args []string) (int, error
 	if _, err := c.api.Spawn(ctx, ls.ID, api.SpawnRequest{Argv: argv, Env: os.Environ(), Dir: cwd}); err != nil {
 		cleanup()
 		return 1, err
+	}
+	if *interactive {
+		return c.interactive(ctx, ls.ID, cleanup)
 	}
 	if !*wait {
 		c.print(ls)
@@ -592,4 +600,74 @@ func (c *cli) resizeRequest(ctx context.Context, args []string) (int, error) {
 		return 1, err
 	}
 	return 0, nil
+}
+
+// interactive relays the lead's terminal to the user's until the lead
+// ends. In a real terminal the local side goes to raw mode, so that every
+// key, Ctrl-C included, reaches the agent, and window size changes follow.
+func (c *cli) interactive(ctx context.Context, id api.LeaseID, cleanup func()) (int, error) {
+	t, err := c.api.Attach(ctx, id)
+	if err != nil {
+		cleanup()
+		return 1, err
+	}
+	defer t.Close()
+	in := stdin
+	restore := func() {}
+	if f, ok := in.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		fd := int(f.Fd())
+		if old, err := term.MakeRaw(fd); err == nil {
+			restore = func() { _ = term.Restore(fd, old) }
+		}
+		resize := func() {
+			if cols, rows, err := term.GetSize(fd); err == nil {
+				_ = t.Resize(uint16(rows), uint16(cols))
+			}
+		}
+		resize()
+		winch := make(chan os.Signal, 1)
+		signal.Notify(winch, syscall.SIGWINCH)
+		defer signal.Stop(winch)
+		go func() {
+			for range winch {
+				resize()
+			}
+		}()
+	}
+	defer restore()
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := in.Read(buf)
+			if n > 0 && t.Type(buf[:n]) != nil {
+				return
+			}
+			if err != nil {
+				return // end of input: the lead runs on until it ends by itself
+			}
+		}
+	}()
+	out := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(c.out, t)
+		close(out)
+	}()
+	select {
+	case <-out:
+	case <-ctx.Done():
+		restore()
+		cleanup()
+		return 130, errors.New("interrupted; the lease was killed")
+	}
+	restore()
+	res, err := c.api.WaitChildren(context.Background(), id, api.WaitChildrenRequest{Self: true, TimeoutSeconds: 30})
+	if err != nil || len(res.Results) == 0 {
+		return 1, err
+	}
+	term := res.Results[0]
+	fmt.Fprintf(c.err, "\r\nlease %s ended: %d %s\n", term.Lease, term.Code, term.Name)
+	if term.Code >= 200 && term.Code < 300 {
+		return 0, nil
+	}
+	return 3, nil
 }

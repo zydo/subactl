@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/zydo/subactl/api"
+	"github.com/zydo/subactl/internal/pty"
 )
 
 // Fake is an in-memory backend for testing the ledger, admission and the
@@ -56,7 +57,14 @@ type FakeProc struct {
 	exited     bool
 	ignoreTERM bool
 	Cmd        Cmd
+	// tty is the master end and slave the device path of the simulated
+	// lead's terminal, when the command asked for one.
+	tty   *os.File
+	slave string
 }
+
+// TTY implements TTYProc.
+func (p *FakeProc) TTY() *os.File { return p.tty }
 
 // NewFake returns a fake backend that claims hard enforcement everywhere,
 // so that tests of ordinary flows are not rejected. Use SetCapabilities to
@@ -140,6 +148,15 @@ func (f *Fake) Spawn(_ context.Context, g ACGroup, cmd Cmd) (Proc, error) {
 	}
 	f.nextPid++
 	fg.main = &FakeProc{f: f, pid: f.nextPid, done: make(chan struct{}), Cmd: cmd}
+	if cmd.TTY {
+		// A real pseudo-terminal with nothing on its slave side: tests open
+		// the slave to play the agent.
+		pair, err := pty.Open()
+		if err != nil {
+			return nil, err
+		}
+		fg.main.tty, fg.main.slave = pair.Master, pair.Slave
+	}
 	return fg.main, nil
 }
 
@@ -428,4 +445,11 @@ func (f *Fake) RemoveScratch(lease api.LeaseID) error {
 		return nil
 	}
 	return os.RemoveAll(filepath.Join(f.ScratchBase, string(lease)))
+}
+
+// Slave returns the slave device of the lease's simulated terminal.
+func (f *Fake) Slave(lease api.LeaseID) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.must(lease).main.slave
 }

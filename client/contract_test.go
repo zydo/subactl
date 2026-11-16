@@ -9,9 +9,7 @@ import (
 // pending lists contract operations the client does not implement yet, with
 // the milestone that adds each. An entry must be removed when its method
 // lands, and the test fails if it is not.
-var pending = map[string]string{
-	"attach": "M4",
-}
+var pending = map[string]string{}
 
 func TestClientMatchesContract(t *testing.T) {
 	c, err := contract.Load()

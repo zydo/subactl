@@ -106,6 +106,10 @@ type runtime struct {
 	pending int
 	step    string
 	started time.Time // when the main process was spawned
+	// wantTTY is set at acquire for a lead that asked for a terminal; tty
+	// is the relay once the main process runs.
+	wantTTY bool
+	tty     *ttyRelay
 }
 
 // Manager owns every lease from acquire to reaped.
@@ -400,7 +404,7 @@ func (m *Manager) Acquire(ctx context.Context, c Caller, req api.AcquireRequest)
 		m.led.Abort(ls.ID)
 		return api.Lease{}, apiErr(http.StatusInternalServerError, api.ErrInternal, "create acgroup: %v", err)
 	}
-	rt := &runtime{group: g, done: make(chan struct{})}
+	rt := &runtime{group: g, done: make(chan struct{}), wantTTY: req.TTY}
 	m.mu.Lock()
 	m.rt[ls.ID] = rt
 	m.mu.Unlock()
@@ -478,13 +482,19 @@ func (m *Manager) Spawn(ctx context.Context, c Caller, id api.LeaseID, req api.S
 	if rt == nil || rt.proc != nil || m.led.Running(ls.ID) != nil {
 		return api.SpawnResponse{}, apiErr(http.StatusConflict, api.ErrConflict, "lease %s is not waiting for its main process; a lease has exactly one", ls.ID)
 	}
-	proc, err := m.be.Spawn(ctx, rt.group, backend.Cmd{Argv: req.Argv, Env: req.Env, Dir: req.Dir, UID: ls.UID})
+	proc, err := m.be.Spawn(ctx, rt.group, backend.Cmd{Argv: req.Argv, Env: req.Env, Dir: req.Dir, UID: ls.UID, TTY: rt.wantTTY})
 	if err != nil {
 		// The lease is running in the ledger but has no process: reap it.
 		go m.reap(ls.ID, api.CodeSubactlInternal, map[string]any{"spawn_error": err.Error()})
 		return api.SpawnResponse{}, apiErr(http.StatusInternalServerError, api.ErrInternal, "spawn: %v", err)
 	}
 	rt.proc, rt.started = proc, time.Now()
+	if tp, ok := proc.(backend.TTYProc); ok && tp.TTY() != nil {
+		rt.tty = newTTYRelay(tp.TTY())
+	} else if rt.wantTTY {
+		// Honest about it: this backend has no terminal to give.
+		m.log.Warn("the backend cannot give this lead a terminal; it runs headless", "lease", ls.ID)
+	}
 	go m.onMainExit(ls.ID, proc.Wait)
 	go m.publish(telemetry.EventState, ls.ID, map[string]any{"state": api.StateRunning, "pid": proc.Pid()})
 	return api.SpawnResponse{Pid: proc.Pid()}, nil
@@ -600,6 +610,9 @@ func (m *Manager) reap(id api.LeaseID, code int, evidence map[string]any) {
 		m.mu.Lock()
 		delete(m.rt, mk.ID)
 		m.mu.Unlock()
+		if rt.tty != nil {
+			rt.tty.close()
+		}
 		m.ended(ls, term)
 		m.forget(ls)
 		close(rt.done)
