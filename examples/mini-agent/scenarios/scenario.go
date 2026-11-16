@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zydo/subactl/api"
 	"github.com/zydo/subactl/examples/mini-agent/llm"
 	"github.com/zydo/subactl/yamlite"
 )
@@ -57,6 +58,19 @@ type Scenario struct {
 	OutputRunaway     bool // G5: one worker writes output without end
 	UnboundedParallel bool // G6: tsc and tests at 4x the core count, unbounded file walks
 
+	// Envelopes gives the memory limit of each kind of agent when it runs
+	// under subactl: "lead", "upgrade", "fix" and "runaway". A kind without
+	// an entry gets what subactl suggests, or its default.
+	Envelopes map[string]int64
+	// Adaptive makes workers start from subactl's suggestion for their
+	// kind instead of Envelopes, and declare a grow rule (group C).
+	Adaptive bool
+	// GrowFactor is how far a worker's limit may grow on NEAR_LIMIT, as a
+	// multiple of its initial limit. Zero declares no rule.
+	GrowFactor float64
+	// OutputLimit caps each worker's stdout and stderr under subactl.
+	OutputLimit int64
+
 	// Env is extra environment for the task's shell files.
 	Env map[string]string
 }
@@ -85,7 +99,7 @@ func Parse(data []byte) (*Scenario, error) {
 	if !ok {
 		return nil, fmt.Errorf("scenario must be a map")
 	}
-	sc := &Scenario{Task: "toy", Fanout: 4, Depth: 1, Env: map[string]string{}}
+	sc := &Scenario{Task: "toy", Fanout: 4, Depth: 1, Env: map[string]string{}, Envelopes: map[string]int64{}}
 	d := decoder{m: m}
 	d.int64("seed", &sc.Seed)
 	d.str("task", &sc.Task)
@@ -109,6 +123,20 @@ func Parse(data []byte) (*Scenario, error) {
 		gd.bool("output_runaway", &sc.OutputRunaway)
 		gd.bool("unbounded_parallel", &sc.UnboundedParallel)
 		d.errs = append(d.errs, gd.finish()...)
+	}
+	d.bool("adaptive", &sc.Adaptive)
+	d.float("grow_factor", &sc.GrowFactor)
+	d.size("output_limit", &sc.OutputLimit)
+	if e, ok := d.take("envelopes").(map[string]any); ok {
+		ed := decoder{m: e, prefix: "envelopes."}
+		for _, kind := range []string{"lead", "upgrade", "fix", "runaway"} {
+			var n int64
+			ed.size(kind, &n)
+			if n > 0 {
+				sc.Envelopes[kind] = n
+			}
+		}
+		d.errs = append(d.errs, ed.finish()...)
 	}
 	if e, ok := d.take("env").(map[string]any); ok {
 		for k, v := range e {
@@ -211,6 +239,20 @@ func (d *decoder) dur(key string, dst *time.Duration) {
 	default:
 		d.bad(key, "a duration such as 90s or 5m", v)
 	}
+}
+
+// size reads a byte size such as 2G or 512M.
+func (d *decoder) size(key string, dst *int64) {
+	v := d.take(key)
+	if v == nil {
+		return
+	}
+	n, err := api.ParseBytes(fmt.Sprint(v))
+	if err != nil {
+		d.bad(key, "a size such as 512M or 2G", v)
+		return
+	}
+	*dst = n
 }
 
 func (d *decoder) finish() []string {

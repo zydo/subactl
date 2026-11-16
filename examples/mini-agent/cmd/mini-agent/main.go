@@ -5,16 +5,21 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/zydo/subactl/api"
+	"github.com/zydo/subactl/client"
 	"github.com/zydo/subactl/examples/mini-agent/agent"
 	"github.com/zydo/subactl/examples/mini-agent/llm"
 	"github.com/zydo/subactl/examples/mini-agent/scenarios"
@@ -33,6 +38,12 @@ const (
 	// envRunID marks every process of a run, so that what is left behind
 	// can be found afterwards.
 	envRunID = "SUBACTL_EXPERIMENT"
+	// envWrapped marks a process that subactl started for mini-agent. It is
+	// removed from the environment of the bash tool, so that a mini-agent
+	// started from there wraps itself again, as a child.
+	envWrapped = "MINI_AGENT_WRAPPED"
+	envLease   = "SUBACTL_LEASE_ID" // set by subactl inside a lease
+	envSocket  = "SUBACTL_SOCK"
 )
 
 // Exit statuses.
@@ -63,12 +74,7 @@ func run() int {
 		return code
 	}
 
-	// The one switch between the two modes. Everything below is shared.
-	switch *mode {
-	case "without":
-	case "with":
-		return fail(exitUsage, "self-wrapping under subactl lands in milestone M4; use --mode without")
-	default:
+	if *mode != "with" && *mode != "without" {
 		return fail(exitUsage, "unknown mode %q: want with or without", *mode)
 	}
 	if *brainName != "scripted" {
@@ -90,6 +96,14 @@ func run() int {
 	self, err := os.Executable()
 	if err != nil {
 		return fail(exitFailed, "%v", err)
+	}
+	// The one switch between the two modes. With subactl, mini-agent does
+	// not start itself: it asks subactl to, as a lead when it is outside
+	// every lease and as a child of the current lease when it is inside
+	// one. A model that writes "mini-agent --task X &" in bash therefore
+	// still ends up inside the agent tree. Everything below is shared.
+	if *mode == "with" && os.Getenv(envWrapped) == "" {
+		return fail(exitFailed, "%v", wrap(sc, self, *task))
 	}
 	abs, err := filepath.Abs(*scenarioPath)
 	if err != nil {
@@ -139,7 +153,15 @@ func run() int {
 		QuotaAt: sc.QuotaAt, QuotaFor: sc.QuotaFor, LeakBytes: int64(sc.LeakMB) << 20,
 	}
 
-	env := append(os.Environ(), sc.TaskEnv(*task, depth)...)
+	// The inherited environment first, then this agent's own task values,
+	// which must win over what its parent exported.
+	var env []string
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, envWrapped+"=") {
+			env = append(env, kv)
+		}
+	}
+	env = append(env, sc.TaskEnv(*task, depth)...)
 	env = append(env,
 		envRun+"="+*runDir,
 		fmt.Sprint(envT0, "=", t0.UnixNano()),
@@ -185,6 +207,10 @@ func run() int {
 		}()
 	}
 
+	var adapter *agent.Adapter
+	if *mode == "with" {
+		adapter = agent.NewAdapter(os.Getenv(envSocket))
+	}
 	a := &agent.Agent{
 		Brain:   brain,
 		Tools:   tools.All(tools.Config{Dir: cwd, SpillDir: work, Env: env}),
@@ -198,8 +224,24 @@ func run() int {
 			return max(sc.QuotaAt+sc.QuotaFor-clock(), 0) + time.Second, true
 		},
 	}
+	if adapter != nil {
+		adapter.Attach(ctx, a, api.LeaseID(os.Getenv(envLease)))
+	}
 	err = a.Run(ctx, "Carry out the task: "+label)
+	// Under subactl the outcome is also handed up through it: a result file
+	// in the lease's scratch directory and a "done" beacon.
+	report := func(res agent.Result) {
+		_ = reg.WriteResult(res)
+		if adapter != nil {
+			data, _ := json.Marshal(res)
+			_ = adapter.Done(context.Background(), string(data))
+		}
+	}
 	switch {
+	case errors.Is(err, agent.ErrStop):
+		printer.Line("asked to terminate: stopping before the next tool call")
+		report(agent.Result{Task: workName, Status: "failed", Detail: "terminated"})
+		return exitFailed
 	case errors.Is(err, llm.ErrQuota):
 		// An abort is not a verdict on the task: no result is written, so
 		// the planner sees the task as lost and dispatches it again.
@@ -208,11 +250,14 @@ func run() int {
 	case errors.Is(err, context.Canceled):
 		return 130
 	case err != nil:
-		_ = reg.WriteResult(agent.Result{Task: workName, Status: "failed", Detail: err.Error()})
+		report(agent.Result{Task: workName, Status: "failed", Detail: err.Error()})
 		return fail(exitFailed, "%v", err)
 	}
 	if lead {
 		printer.Line(fmt.Sprintf("finished; run directory: %s", *runDir))
+		if adapter != nil {
+			_ = adapter.Done(context.Background(), `{"status":"ok"}`)
+		}
 		return 0
 	}
 	// A task succeeded if its last step left the ok marker.
@@ -220,11 +265,60 @@ func run() int {
 	if _, err := os.Stat(filepath.Join(work, "ok")); err != nil {
 		res.Status = "failed"
 	}
-	if err := reg.WriteResult(res); err != nil {
-		return fail(exitFailed, "%v", err)
-	}
+	report(res)
 	if res.Status != "ok" {
 		return exitFailed
 	}
 	return 0
+}
+
+// wrap replaces this process with "subactl run" or "subactl spawn --wait"
+// running the same mini-agent command. It returns only if that fails.
+func wrap(sc *scenarios.Scenario, self, task string) error {
+	subactl, err := exec.LookPath("subactl")
+	if err != nil {
+		// Fall back to a subactl installed next to mini-agent.
+		subactl = filepath.Join(filepath.Dir(self), "subactl")
+		if _, serr := os.Stat(subactl); serr != nil {
+			return fmt.Errorf("subactl is not on PATH; mini-agent --mode with needs it (%v)", err)
+		}
+	}
+	inLease := os.Getenv(envLease) != ""
+	kind := "lead"
+	args := []string{"subactl", "run"}
+	if inLease {
+		kind, _, _ = strings.Cut(task, ":")
+		if kind == "" {
+			return errors.New("inside a lease a mini-agent needs --task")
+		}
+		args = []string{"subactl", "spawn", "--wait"}
+	}
+	args = append(args, "--kind", kind)
+
+	// The envelope. A static scenario names it per kind. An adaptive one
+	// starts from what subactl suggests from the peaks of earlier agents of
+	// the same kind, and declares how far the limit may grow.
+	memory := sc.Envelopes[kind]
+	if inLease && sc.Adaptive {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		a, err := client.New(os.Getenv(envSocket)).Available(ctx, api.Self, kind)
+		cancel()
+		if s, ok := a.Suggest[kind]; err == nil && ok && !s.Default {
+			memory = s.Memory
+		}
+	}
+	if inLease && memory == 0 {
+		memory = 1 << 30
+	}
+	if memory > 0 {
+		args = append(args, "--memory", strconv.FormatInt(memory, 10))
+		if inLease && sc.GrowFactor > 1 {
+			args = append(args, "--grow-to", strconv.FormatInt(int64(float64(memory)*sc.GrowFactor), 10))
+		}
+	}
+	if inLease && sc.OutputLimit > 0 {
+		args = append(args, "--output", strconv.FormatInt(sc.OutputLimit, 10))
+	}
+	args = append(append(args, "--", self), os.Args[1:]...)
+	return syscall.Exec(subactl, args, append(os.Environ(), envWrapped+"=1"))
 }
