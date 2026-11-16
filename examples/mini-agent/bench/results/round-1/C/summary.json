@@ -1,0 +1,118 @@
+[
+  {
+    "group": "C",
+    "run": 1,
+    "scenario": "radix.yaml",
+    "chamber_bytes": 12884901888,
+    "mem_basis": "working_set",
+    "host_peak_ws": 8.65731430053711,
+    "host_oom": 0,
+    "oom_kills": 1013,
+    "meltdown": false,
+    "orphans_after": 0,
+    "leaked_ws_after": 0.001110076904296875,
+    "completion": 0,
+    "packages": 54,
+    "work_lost": 17,
+    "util_mean": 0.08457147637192085,
+    "safety_net_count": 0,
+    "makespan": 3.0682428791666667,
+    "lead_exit": 3,
+    "codes": {
+      "413": 17,
+      "502": 1
+    }
+  },
+  {
+    "group": "C",
+    "run": 2,
+    "scenario": "radix.yaml",
+    "chamber_bytes": 12884901888,
+    "mem_basis": "working_set",
+    "host_peak_ws": 4.024127960205078,
+    "host_oom": 0,
+    "oom_kills": 0,
+    "meltdown": false,
+    "orphans_after": 0,
+    "leaked_ws_after": 0.000152587890625,
+    "completion": 0,
+    "packages": 54,
+    "work_lost": 0,
+    "util_mean": 0.024852123849308416,
+    "safety_net_count": 0,
+    "makespan": 15.00104028805,
+    "lead_exit": 0,
+    "codes": {
+      "200": 1
+    }
+  },
+  {
+    "group": "C",
+    "run": 3,
+    "scenario": "radix.yaml",
+    "chamber_bytes": 12884901888,
+    "mem_basis": "working_set",
+    "host_peak_ws": 4.020591735839844,
+    "host_oom": 0,
+    "oom_kills": 0,
+    "meltdown": false,
+    "orphans_after": 0,
+    "leaked_ws_after": 0.000148773193359375,
+    "completion": 0,
+    "packages": 54,
+    "work_lost": 0,
+    "util_mean": 0.02538279051421791,
+    "safety_net_count": 0,
+    "makespan": 15.00112376445,
+    "lead_exit": 0,
+    "codes": {
+      "200": 1
+    }
+  },
+  {
+    "group": "C",
+    "run": 4,
+    "scenario": "radix.yaml",
+    "chamber_bytes": 12884901888,
+    "mem_basis": "working_set",
+    "host_peak_ws": 4.035984039306641,
+    "host_oom": 0,
+    "oom_kills": 0,
+    "meltdown": false,
+    "orphans_after": 0,
+    "leaked_ws_after": 0.0001678466796875,
+    "completion": 0,
+    "packages": 54,
+    "work_lost": 0,
+    "util_mean": 0.026029467045165084,
+    "safety_net_count": 0,
+    "makespan": 15.001148139516667,
+    "lead_exit": 0,
+    "codes": {
+      "200": 1
+    }
+  },
+  {
+    "group": "C",
+    "run": 5,
+    "scenario": "radix.yaml",
+    "chamber_bytes": 12884901888,
+    "mem_basis": "working_set",
+    "host_peak_ws": 4.050006866455078,
+    "host_oom": 0,
+    "oom_kills": 0,
+    "meltdown": false,
+    "orphans_after": 0,
+    "leaked_ws_after": 0.01157379150390625,
+    "completion": 0,
+    "packages": 54,
+    "work_lost": 0,
+    "util_mean": 0.0264835195577769,
+    "safety_net_count": 0,
+    "makespan": 15.001041076966667,
+    "lead_exit": 0,
+    "codes": {
+      "200": 1
+    }
+  }
+]

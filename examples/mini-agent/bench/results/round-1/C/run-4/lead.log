@@ -1,0 +1,16 @@
+{
+  "code": 200,
+  "name": "COMPLETED",
+  "lease": "ls_2e116b59",
+  "kind": "lead",
+  "mem_basis": "working_set",
+  "peak": 584728576,
+  "limit": 9663676416,
+  "enforcement": "hard",
+  "evidence": {
+    "exit_code": 0,
+    "reaped_pids": 0
+  },
+  "message": "lead ls_2e116b59 completed: its main process exited with status 0.",
+  "at": "2026-11-16T18:52:57.579073336Z"
+}

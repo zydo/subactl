@@ -22,9 +22,14 @@ func TestWriteReadAndSuggest(t *testing.T) {
 	// Twenty peaks of 1..20 x 10MiB for a second kind, one of them on
 	// another basis, which must not be mixed in.
 	for i := 1; i <= 20; i++ {
-		l.Write(Record{At: day2, Type: TypeTerminate, Lease: "r", Termination: &api.Termination{Kind: "renderer", Peak: int64(i) * 10 * mib, MemBasis: api.BasisWorkingSet}})
+		l.Write(Record{At: day2, Type: TypeTerminate, Lease: "r", Termination: &api.Termination{Code: 200, Kind: "renderer", Peak: int64(i) * 10 * mib, MemBasis: api.BasisWorkingSet}})
 	}
-	l.Write(Record{At: day2, Type: TypeTerminate, Lease: "w", Termination: &api.Termination{Kind: "renderer", Peak: 9000 * mib, MemBasis: api.BasisCommit}})
+	l.Write(Record{At: day2, Type: TypeTerminate, Lease: "w", Termination: &api.Termination{Code: 200, Kind: "renderer", Peak: 9000 * mib, MemBasis: api.BasisCommit}})
+	// Leases that did not run to completion are not measurements of need:
+	// one killed at its limit, one killed by its planner, one aborted.
+	for _, code := range []int{413, 499, 520} {
+		l.Write(Record{At: day2, Type: TypeTerminate, Lease: "k", Termination: &api.Termination{Code: code, Kind: "renderer", Peak: 8000 * mib, MemBasis: api.BasisWorkingSet}})
+	}
 	l.Close()
 	if l.Dropped() != 0 {
 		t.Fatalf("dropped %d", l.Dropped())

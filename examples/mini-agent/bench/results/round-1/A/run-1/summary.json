@@ -1,0 +1,28 @@
+{
+  "group": "A",
+  "run": 1,
+  "scenario": "radix.yaml",
+  "chamber_bytes": 12884901888,
+  "mem_basis": "working_set",
+  "host_peak_ws": 12,
+  "host_oom": 698944,
+  "oom_kills": 3628,
+  "meltdown": false,
+  "orphans_after": 6,
+  "leaked_ws_after": 2.375591278076172,
+  "completion": 0,
+  "packages": 54,
+  "work_lost": 31,
+  "util_mean": 0.6546214338719617,
+  "safety_net_count": 0,
+  "makespan": 15.000135066516666,
+  "lead_exit": 0,
+  "orphan_sample": [
+    "node /srv/radix/wt/a-18-1/use-rect/node_modules/.bin/storybook dev -p 9090 --ci --no-open",
+    "node /srv/radix/wt/a-18-1/use-previous/node_modules/.bin/storybook dev -p 9091 --ci --no-open",
+    "/srv/radix/wt/a-18-1/use-previous/node_modules/@storybook/core-common/node_modules/@esbuild/linux-arm64/bin/esbuild --se…",
+    "/srv/radix/wt/a-18-1/use-rect/node_modules/@storybook/core-common/node_modules/@esbuild/linux-arm64/bin/esbuild --servic…",
+    "/srv/radix/wt/a-18-1/use-previous/node_modules/@storybook/builder-manager/node_modules/@esbuild/linux-arm64/bin/esbuild …",
+    "/srv/radix/wt/a-18-1/use-rect/node_modules/@storybook/builder-manager/node_modules/@esbuild/linux-arm64/bin/esbuild --se…"
+  ]
+}

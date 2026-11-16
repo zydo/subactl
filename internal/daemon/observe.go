@@ -136,7 +136,7 @@ func (m *Manager) auditLease(typ string, ls api.Lease, fill func(*audit.Record))
 func (m *Manager) ended(ls api.Lease, term api.Termination) {
 	o := m.obs
 	o.metrics.Termination(term.Code, ls.Kind, term.Peak)
-	o.suggest.Add(ls.Kind, term.Peak)
+	o.suggest.Add(ls.Kind, term.Peak, term.Code)
 	o.mu.Lock()
 	o.lease(ls.ID).term = &term
 	o.ended = append(o.ended, ls.ID)

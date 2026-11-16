@@ -198,9 +198,15 @@ func NewSuggester(def int64, basis api.MemBasis) *Suggester {
 	return &Suggester{Default: def, MinSamples: 5, Basis: basis, peaks: map[string][]int64{}}
 }
 
-// Add records the peak of one finished lease.
-func (s *Suggester) Add(kind string, peak int64) {
-	if kind == "" || peak <= 0 {
+// Add records the peak of one finished lease. Only a lease that ran to
+// completion (a 2xx code) is a measurement of what its kind needs. The
+// peak of a lease killed at its memory limit is the limit, and the peak of
+// one ended early is whatever it had reached: counting either would make
+// the suggestion follow the limits instead of the need. In particular,
+// with a grow rule each 413 would raise the next suggestion, which would
+// raise the next limit, without end.
+func (s *Suggester) Add(kind string, peak int64, code int) {
+	if kind == "" || peak <= 0 || code < 200 || code > 299 {
 		return
 	}
 	s.mu.Lock()
@@ -223,7 +229,7 @@ func (s *Suggester) Load(dir string) error {
 	for _, name := range files {
 		err := scan(name, func(r Record) {
 			if t := r.Termination; r.Type == TypeTerminate && t != nil && t.MemBasis == s.Basis {
-				s.Add(t.Kind, t.Peak)
+				s.Add(t.Kind, t.Peak, t.Code)
 			}
 		})
 		if err != nil {

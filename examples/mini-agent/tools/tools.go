@@ -40,6 +40,11 @@ type Config struct {
 	BashTimeout time.Duration
 	// Env is the environment of bash commands; nil means the agent's own.
 	Env []string
+	// Mirror, when set, also receives the output of bash commands as it is
+	// written, the way a terminal UI shows a running command. Under subactl
+	// it is the agent's stdout, which is what the lease's output limit
+	// measures: a command that writes without end is then caught by it.
+	Mirror io.Writer
 }
 
 // All returns the four tools.
@@ -230,6 +235,12 @@ func (t *bash) Run(ctx context.Context, input json.RawMessage) (string, error) {
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
+	if t.Mirror != nil {
+		stop := make(chan struct{})
+		followed := make(chan struct{})
+		go follow(spill, t.Mirror, stop, followed)
+		defer func() { close(stop); <-followed }()
+	}
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	var note string
@@ -257,6 +268,44 @@ func (t *bash) Run(ctx context.Context, input json.RawMessage) (string, error) {
 		text = "[no output]"
 	}
 	return text, nil
+}
+
+// follow copies what is appended to the file at path to w until stop is
+// closed, then once more to pick up the rest. It reads the file rather
+// than sharing a pipe with the command, so a background process the
+// command leaves behind cannot keep anything waiting.
+func follow(path string, w io.Writer, stop <-chan struct{}, done chan<- struct{}) {
+	defer close(done)
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	buf := make([]byte, 64<<10)
+	drain := func() {
+		for {
+			n, err := f.Read(buf)
+			if n > 0 {
+				if _, werr := w.Write(buf[:n]); werr != nil {
+					return
+				}
+			}
+			if err != nil || n == 0 {
+				return
+			}
+		}
+	}
+	tick := time.NewTicker(200 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		drain()
+		select {
+		case <-stop:
+			drain()
+			return
+		case <-tick.C:
+		}
+	}
 }
 
 // tail returns the head and tail of the spill file without reading all of

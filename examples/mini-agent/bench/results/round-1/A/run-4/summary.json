@@ -1,0 +1,30 @@
+{
+  "group": "A",
+  "run": 4,
+  "scenario": "radix.yaml",
+  "chamber_bytes": 12884901888,
+  "mem_basis": "working_set",
+  "host_peak_ws": 12,
+  "host_oom": 999896,
+  "oom_kills": 3708,
+  "meltdown": false,
+  "orphans_after": 15,
+  "leaked_ws_after": 2.9358062744140625,
+  "completion": 0,
+  "packages": 54,
+  "work_lost": 32,
+  "util_mean": 0.7349149346351623,
+  "safety_net_count": 0,
+  "makespan": 15.003332372833333,
+  "lead_exit": 0,
+  "orphan_sample": [
+    "node /srv/radix/wt/a-18-4/use-previous/node_modules/.bin/storybook dev -p 9089 --ci --no-open",
+    "/srv/radix/wt/a-18-4/use-previous/node_modules/@storybook/core-common/node_modules/@esbuild/linux-arm64/bin/esbuild --se…",
+    "/srv/radix/wt/a-18-4/use-previous/node_modules/@storybook/builder-manager/node_modules/@esbuild/linux-arm64/bin/esbuild …",
+    "node /srv/radix/wt/a-18-4/visually-hidden/node_modules/.bin/storybook dev -p 9090 --ci --no-open",
+    "node /srv/radix/wt/a-18-4/use-escape-keydown/node_modules/.bin/storybook dev -p 9091 --ci --no-open",
+    "/srv/radix/wt/a-18-4/visually-hidden/node_modules/@storybook/core-common/node_modules/@esbuild/linux-arm64/bin/esbuild -…",
+    "node /srv/radix/wt/a-18-4/use-controllable-state/node_modules/.bin/storybook dev -p 9092 --ci --no-open",
+    "node /srv/radix/wt/a-18-4/use-layout-effect/node_modules/.bin/storybook dev -p 9093 --ci --no-open"
+  ]
+}

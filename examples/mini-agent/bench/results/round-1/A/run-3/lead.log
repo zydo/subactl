@@ -1,0 +1,35 @@
+    0s [lead] I'll read the package list first.
+    0s [lead] → bash #1 {"command":"\"$TASK_DIR/list.sh\" | head -n \"${MAX_PACKAGES:-1000}\"","timeout":60}
+    0s [lead] ← bash #1 accessible-icon accordion alert-dialog announce arrow aspect-ratio avatar checkbox collapsible collection compose-refs context context-menu dialog direction dismissable-layer dropdown-menu focus-guard…
+  2m0s [lead] One worker per package, in parallel.
+  2m0s [lead] → bash #2 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
+  5m0s [lead] usage limit: killed subagent upgrade:accessible-icon.d1 (pid 108223)
+  5m0s [lead] usage limit: killed subagent upgrade:alert-dialog.d1 (pid 108225)
+  5m0s [lead] usage limit: killed subagent upgrade:announce.d1 (pid 108226)
+  5m0s [lead] usage limit: killed subagent upgrade:arrow.d1 (pid 108227)
+  5m0s [lead] usage limit: killed subagent upgrade:aspect-ratio.d1 (pid 108228)
+  5m0s [lead] usage limit: killed subagent upgrade:avatar.d1 (pid 108229)
+  5m0s [lead] usage limit: killed subagent upgrade:checkbox.d1 (pid 108230)
+  5m0s [lead] usage limit: killed subagent upgrade:collapsible.d1 (pid 108231)
+  5m0s [lead] usage limit: killed subagent upgrade:collection.d1 (pid 108232)
+  5m0s [lead] usage limit: killed subagent upgrade:context-menu.d1 (pid 108275)
+  5m0s [lead] usage limit: killed subagent upgrade:direction.d1 (pid 108413)
+  5m0s [lead] usage limit: killed subagent upgrade:form.d1 (pid 108483)
+  5m0s [lead] usage limit: killed subagent upgrade:hover-card.d1 (pid 108601)
+  5m0s [lead] usage limit: killed subagent upgrade:radio-group.d1 (pid 109183)
+  5m0s [lead] usage limit: killed subagent upgrade:roving-focus.d1 (pid 123524)
+  5m0s [lead] usage limit: killed subagent upgrade:scroll-area.d1 (pid 125688)
+  5m0s [lead] usage limit: killed subagent upgrade:select.d1 (pid 126127)
+  5m0s [lead] usage limit: killed subagent upgrade:separator.d1 (pid 127590)
+  5m0s [lead] ← bash #2 dispatching 55 workers, at most 32 at a time 2m0s [upgrade:checkbox] Setting up a worktree for checkbox. 2m0s [upgrade:compose-refs] Setting up a worktree for compose-refs. 2m0s [upgrade:arrow] Settin…
+  5m0s [lead] ! llm: usage limit reached
+ 5m21s [lead] Some workers did not report back. Dispatching those again.
+ 5m21s [lead] → bash #3 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
+ 15m0s [lead] ← bash #3 dispatching 49 workers, at most 32 at a time 5m21s [upgrade:accessible-icon] Setting up a worktree for accessible-icon. 5m21s [upgrade:accessible-icon] → bash #1 {"command":"\"$TASK_DIR/setup.sh\"",…
+ 15m0s [lead] Checking once more for packages without a result.
+ 15m0s [lead] → bash #4 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
+ 15m0s [lead] ← bash #4 dispatching 1 workers, at most 32 at a time no time left
+ 15m0s [lead] Time is up. Collecting results.
+ 15m0s [lead] → bash #5 {"command":"ls \"$RUN_DIR/results\" | wc -l","timeout":60}
+ 15m0s [lead] ← bash #5 162
+ 15m0s [lead] finished; run directory: /tmp/out/A/run-3/run

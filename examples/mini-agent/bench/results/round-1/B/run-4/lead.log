@@ -1,0 +1,16 @@
+{
+  "code": 200,
+  "name": "COMPLETED",
+  "lease": "ls_905cb38f",
+  "kind": "lead",
+  "mem_basis": "working_set",
+  "peak": 8627597312,
+  "limit": 9663676416,
+  "enforcement": "hard",
+  "evidence": {
+    "exit_code": 0,
+    "reaped_pids": 0
+  },
+  "message": "lead ls_905cb38f completed: its main process exited with status 0.",
+  "at": "2026-11-16T17:44:19.13070843Z"
+}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -82,4 +83,43 @@ func TestBash(t *testing.T) {
 	if _, err := call(t, bash, map[string]any{"command": "sleep 20 >/dev/null 2>&1 & echo started"}); err != nil || time.Since(start) > 3*time.Second {
 		t.Fatalf("blocked for %v: %v", time.Since(start), err)
 	}
+}
+
+// With a mirror, a command's output is also copied out while it runs, and
+// a background process left behind still does not block the call.
+func TestBashMirror(t *testing.T) {
+	dir := t.TempDir()
+	var mirror lockedBuffer
+	var bash Tool
+	for _, tool := range All(Config{Dir: dir, SpillDir: filepath.Join(dir, "spill"), MaxOutput: 100, Mirror: &mirror}) {
+		if tool.Spec().Name == "bash" {
+			bash = tool
+		}
+	}
+	start := time.Now()
+	out, err := call(t, bash, map[string]any{"command": "seq 1 3000; sleep 20 >/dev/null 2>&1 &"})
+	if err != nil || time.Since(start) > 3*time.Second {
+		t.Fatalf("after %v: %v", time.Since(start), err)
+	}
+	// The model sees a clipped result; the mirror has all of it.
+	if len(out) > 400 || !strings.HasSuffix(mirror.String(), "2999\n3000\n") || !strings.HasPrefix(mirror.String(), "1\n2\n") {
+		t.Fatalf("result of %d bytes, mirror of %d bytes", len(out), len(mirror.String()))
+	}
+}
+
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
 }

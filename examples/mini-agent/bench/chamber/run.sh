@@ -30,7 +30,6 @@ docker run --rm --privileged \
     su node -c "git config --global --add safe.directory \"*\"
       /opt/subactl/bench extract radix /tmp/task
       [ -d /srv/radix/shots-base ] || RADIX_HOME=/srv/radix /tmp/task/prepare.sh
-      rm -rf /srv/radix/wt /srv/radix/r19/node_modules/.cache
       git -C /srv/radix/primitives worktree prune"
     /opt/subactl/bench run --group "$GROUP" --scenario "/sc/$SCENARIO" --runs "$RUNS" --chamber "$CHAMBER" \
       --user node --workdir /srv/radix/primitives --out /tmp/out
@@ -40,9 +39,9 @@ docker run --rm --privileged \
     for r in run-*; do
       mkdir -p "/host/$r"
       cp "$r/summary.json" "$r/series.jsonl" "$r/lead.log" "/host/$r/"
-      [ -f "$r/subactld.log" ] && cp "$r/subactld.log" "/host/$r/"
+      if [ -f "$r/subactld.log" ]; then cp "$r/subactld.log" "/host/$r/"; fi
       # The audit log of the run (group B keeps one per run).
-      [ -d "$r/state/audit" ] && cp -r "$r/state/audit" "/host/$r/audit"
+      if [ -d "$r/state/audit" ]; then cp -r "$r/state/audit" "/host/$r/audit"; fi
     done
     # Group C keeps one audit log across all its runs.
     if [ -d state/audit ]; then cp -r state/audit /host/audit; fi'

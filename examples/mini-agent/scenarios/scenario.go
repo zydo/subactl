@@ -57,6 +57,9 @@ type Scenario struct {
 	LeaveServers      bool // G2: dev servers and browsers are not stopped
 	OutputRunaway     bool // G5: one worker writes output without end
 	UnboundedParallel bool // G6: tsc and tests at 4x the core count, unbounded file walks
+	// UnboundedShare is the share of packages whose worker behaves that
+	// way (default 1, all of them). Which ones is fixed by the seed.
+	UnboundedShare float64
 
 	// Envelopes gives the memory limit of each kind of agent when it runs
 	// under subactl: "lead", "upgrade", "fix" and "runaway". A kind without
@@ -99,7 +102,7 @@ func Parse(data []byte) (*Scenario, error) {
 	if !ok {
 		return nil, fmt.Errorf("scenario must be a map")
 	}
-	sc := &Scenario{Task: "toy", Fanout: 4, Depth: 1, Env: map[string]string{}, Envelopes: map[string]int64{}}
+	sc := &Scenario{Task: "toy", Fanout: 4, Depth: 1, Env: map[string]string{}, Envelopes: map[string]int64{}, UnboundedShare: 1}
 	d := decoder{m: m}
 	d.int64("seed", &sc.Seed)
 	d.str("task", &sc.Task)
@@ -122,6 +125,7 @@ func Parse(data []byte) (*Scenario, error) {
 		gd.bool("leave_servers", &sc.LeaveServers)
 		gd.bool("output_runaway", &sc.OutputRunaway)
 		gd.bool("unbounded_parallel", &sc.UnboundedParallel)
+		gd.float("unbounded_share", &sc.UnboundedShare)
 		d.errs = append(d.errs, gd.finish()...)
 	}
 	d.bool("adaptive", &sc.Adaptive)
@@ -151,8 +155,8 @@ func Parse(data []byte) (*Scenario, error) {
 		return nil, fmt.Errorf("fanout and depth must be at least 1")
 	case sc.Duration <= 0:
 		return nil, fmt.Errorf("duration is required, e.g. 15m")
-	case sc.FailRate < 0 || sc.FailRate > 1:
-		return nil, fmt.Errorf("fail_rate must be between 0 and 1")
+	case sc.FailRate < 0 || sc.FailRate > 1 || sc.UnboundedShare < 0 || sc.UnboundedShare > 1:
+		return nil, fmt.Errorf("fail_rate and greedy.unbounded_share must be between 0 and 1")
 	case sc.InterferenceShare < 0 || sc.InterferenceShare >= 1:
 		return nil, fmt.Errorf("interference_share must be at least 0 and below 1")
 	}
@@ -297,9 +301,19 @@ func (sc *Scenario) Fails(pkg string, depth int) bool {
 	if sc.FailRate <= 0 || depth >= sc.Depth {
 		return false // the deepest fixer always succeeds, so recursion ends
 	}
+	return sc.draw(pkg, fmt.Sprint(depth)) < sc.FailRate
+}
+
+// draw is a number in [0, 1) fixed by the seed, the package and a label.
+func (sc *Scenario) draw(pkg, label string) float64 {
 	h := fnv.New64a()
-	fmt.Fprintf(h, "%d/%s/%d", sc.Seed, pkg, depth)
-	return float64(h.Sum64()%10000)/10000 < sc.FailRate
+	fmt.Fprintf(h, "%d/%s/%s", sc.Seed, pkg, label)
+	return float64(h.Sum64()%10000) / 10000
+}
+
+// Unbounded reports whether the worker of pkg is one of the greedy ones.
+func (sc *Scenario) Unbounded(pkg string) bool {
+	return sc.UnboundedParallel && sc.draw(pkg, "g6") < sc.UnboundedShare
 }
 
 // TaskEnv is the environment the task's shell files see for one agent.
@@ -320,7 +334,7 @@ func (sc *Scenario) TaskEnv(task string, depth int) []string {
 		"FAIL=" + b(sc.Fails(pkg, depth)),
 		"G2_LEAVE_SERVERS=" + b(sc.LeaveServers),
 		"G5_RUNAWAY=" + b(sc.OutputRunaway),
-		"G6_UNBOUNDED=" + b(sc.UnboundedParallel),
+		"G6_UNBOUNDED=" + b(sc.Unbounded(pkg)),
 	}
 	if sc.MaxPackages > 0 {
 		env = append(env, fmt.Sprint("MAX_PACKAGES=", sc.MaxPackages))

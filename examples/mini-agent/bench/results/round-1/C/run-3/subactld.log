@@ -1,0 +1,4 @@
+time=2026-11-16T18:21:57.227Z level=INFO msg="subactld listening" socket=/tmp/out/C/run-3/subactl.sock backend=cgroup2 effective_capacity=10.2GiB reserve=1.8GiB
+time=2026-11-16T18:21:57.332Z level=INFO msg="lease admitted" lease=ls_a30aacfe parent="" kind=lead memory=9663676416
+time=2026-11-16T18:36:57.386Z level=INFO msg="lease reaped" lease=ls_a30aacfe code=200 name=COMPLETED
+time=2026-11-16T18:37:57.401Z level=INFO msg="shutting down: reaping every lease"

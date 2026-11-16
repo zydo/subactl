@@ -19,7 +19,31 @@ const path = require('path');
   fs.mkdirSync(out, { recursive: true });
   // As root (in a container) Chromium cannot use its sandbox.
   log(`${ids.length} stories; launching the browser`);
-  const browser = await chromium.launch({ args: process.getuid() === 0 ? ['--no-sandbox'] : [], timeout: 120000 });
+  const sandbox = process.getuid() === 0 ? ['--no-sandbox'] : [];
+  let browser;
+  if (keep === '1') {
+    // G2: a browser the agent starts and then walks away from. It is its
+    // own detached process, so it outlives this script; Playwright's own
+    // launch would close it when the script exits.
+    // Each check starts its own browser, on its own port and profile: one
+    // left over from an earlier check would serve pages from its cache.
+    const debugPort = 20000 + (process.pid % 20000);
+    const { spawn } = require('child_process');
+    spawn(chromium.executablePath(), ['--headless=new', `--remote-debugging-port=${debugPort}`,
+      `--user-data-dir=${path.join(out, 'chrome-profile-' + process.pid)}`, '--no-first-run', '--disable-dev-shm-usage', '--disable-gpu', ...sandbox, 'about:blank'],
+      { detached: true, stdio: 'ignore' }).unref();
+    for (let i = 0; ; i++) {
+      try {
+        browser = await chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`, { timeout: 5000 });
+        break;
+      } catch (e) {
+        if (i >= 60) throw e;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+  } else {
+    browser = await chromium.launch({ args: sandbox, timeout: 120000 });
+  }
   let errors = 0, changed = 0;
   const messages = [];
   for (const id of ids) {
@@ -65,6 +89,6 @@ const path = require('path');
   }
   console.log(JSON.stringify({ pkg, stories: ids.length, errors, changed, messages }));
   // G2: the agent walks away without closing the browser.
-  if (keep === '1') { browser.process().unref(); process.exit(0); }
+  if (keep === '1') process.exit(0);
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });

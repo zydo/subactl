@@ -20,8 +20,8 @@ output_runaway_at: 9m  # G5
 # there is history, and lets it grow by half on NEAR_LIMIT.
 envelopes:
   lead: 9G
-  upgrade: 2G
-  fix: 512M
+  upgrade: 3500M
+  fix: 1G
   runaway: 256M
 grow_factor: 1.5
 output_limit: 64M
@@ -29,3 +29,4 @@ greedy:
   leave_servers: true       # G2: dev servers and browsers are never stopped
   output_runaway: true      # G5: one worker writes output without end
   unbounded_parallel: true  # G6: tsc and tests at 4x the cores, unbounded file walk
+  unbounded_share: 0.25     # one worker in four is that greedy; the rest are well behaved

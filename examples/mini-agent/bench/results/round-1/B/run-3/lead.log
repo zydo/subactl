@@ -1,0 +1,16 @@
+{
+  "code": 200,
+  "name": "COMPLETED",
+  "lease": "ls_881d624f",
+  "kind": "lead",
+  "mem_basis": "working_set",
+  "peak": 8618684416,
+  "limit": 9663676416,
+  "enforcement": "hard",
+  "evidence": {
+    "exit_code": 0,
+    "reaped_pids": 0
+  },
+  "message": "lead ls_881d624f completed: its main process exited with status 0.",
+  "at": "2026-11-16T17:28:06.912693633Z"
+}

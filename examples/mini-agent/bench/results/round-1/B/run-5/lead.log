@@ -1,0 +1,16 @@
+{
+  "code": 200,
+  "name": "COMPLETED",
+  "lease": "ls_11cd9540",
+  "kind": "lead",
+  "mem_basis": "working_set",
+  "peak": 8423882752,
+  "limit": 9663676416,
+  "enforcement": "hard",
+  "evidence": {
+    "exit_code": 0,
+    "reaped_pids": 0
+  },
+  "message": "lead ls_11cd9540 completed: its main process exited with status 0.",
+  "at": "2026-11-16T18:00:31.032405046Z"
+}

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -216,12 +217,19 @@ func run() int {
 	}
 
 	var adapter *agent.Adapter
+	var mirror io.Writer
 	if *mode == "with" {
 		adapter = agent.NewAdapter(os.Getenv(envSocket))
+		// A child's stdout is its lease's output file; show running
+		// commands there, as a terminal would. The lead's is the user's
+		// terminal, which already shows the events.
+		if !lead {
+			mirror = os.Stdout
+		}
 	}
 	a := &agent.Agent{
 		Brain:   brain,
-		Tools:   tools.All(tools.Config{Dir: cwd, SpillDir: work, Env: env}),
+		Tools:   tools.All(tools.Config{Dir: cwd, SpillDir: work, Env: env, Mirror: mirror}),
 		System:  "You are mini-agent. Tools: read, write, edit, bash.",
 		OnEvent: printer.Event,
 		OnQuota: func(context.Context) (time.Duration, bool) {

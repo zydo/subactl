@@ -1,0 +1,17 @@
+{
+  "code": 413,
+  "name": "OOM_LEASE_LIMIT",
+  "lease": "ls_327b9b38",
+  "kind": "lead",
+  "dimension": "memory",
+  "mem_basis": "working_set",
+  "peak": 9663676416,
+  "limit": 9663676416,
+  "enforcement": "hard",
+  "evidence": {
+    "oom_events": 1,
+    "reaped_pids": 158
+  },
+  "message": "lead ls_327b9b38 exceeded its memory hard limit of 9GiB and was killed as a whole.",
+  "at": "2026-11-16T18:04:53.705824043Z"
+}
