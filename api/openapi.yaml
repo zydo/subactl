@@ -1,0 +1,741 @@
+# The only contract of subactld. Everything that talks to the daemon (the
+# subactl CLI, the Go client, subactl top) depends on this file alone.
+#
+# This file is written in the YAML subset that internal/yamlite parses:
+# block maps, block lists, single-line flow lists of scalars, and plain or
+# quoted scalars. No anchors, tags, block scalars or multiple documents.
+openapi: 3.0.3
+info:
+  title: subactld
+  version: 0.1.0
+  description: Single-host subagent resource controller. Transport is HTTP/JSON over a Unix socket.
+paths:
+  /v1/host:
+    get:
+      operationId: getHost
+      summary: Effective capacity, allocation, external usage, reserve line and capability matrix.
+      responses:
+        '200':
+          description: Host view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Host'
+  /v1/leases:
+    post:
+      operationId: createLease
+      summary: Acquire a lease. Without a parent the lease is a lead and the calling operator process is its holder.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcquireRequest'
+      responses:
+        '201':
+          description: Admitted. With dry_run the lease is checked but not reserved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lease'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+    get:
+      operationId: listLeases
+      summary: Leases visible to the caller, as whole trees in pre-order.
+      parameters:
+        - name: lead
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lease trees.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaseList'
+  /v1/leases/{id}:
+    parameters:
+      - $ref: '#/components/parameters/LeaseId'
+    get:
+      operationId: getLease
+      summary: State, envelope, usage and termination record of one lease.
+      responses:
+        '200':
+          description: The lease.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lease'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: resizeLease
+      summary: Adjust the envelope of a lease in the caller's subtree. A node cannot resize itself.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvelopePatch'
+      responses:
+        '200':
+          description: The lease after the change.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lease'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /v1/leases/{id}/available:
+    parameters:
+      - $ref: '#/components/parameters/LeaseId'
+    get:
+      operationId: getAvailable
+      summary: Remaining budget of this node's subtree and suggested quotas.
+      responses:
+        '200':
+          description: Remaining budget.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Available'
+        '403':
+          $ref: '#/components/responses/Error'
+  /v1/leases/{id}/spawn:
+    parameters:
+      - $ref: '#/components/parameters/LeaseId'
+    post:
+      operationId: spawn
+      summary: Start the main process of the lease inside its acgroup.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpawnRequest'
+      responses:
+        '200':
+          description: Started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpawnResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /v1/leases/{id}/attach:
+    parameters:
+      - $ref: '#/components/parameters/LeaseId'
+    get:
+      operationId: attach
+      summary: Pty relay of a lead, upgraded to a bidirectional stream. Used by subactl run -it.
+      responses:
+        '101':
+          description: Switching protocols to the raw pty stream.
+        '403':
+          $ref: '#/components/responses/Error'
+  /v1/leases/{id}/resize-request:
+    parameters:
+      - $ref: '#/components/parameters/LeaseId'
+    post:
+      operationId: requestResize
+      summary: A child asks its parent for a larger envelope. Delivered to the parent as an event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResizeAsk'
+      responses:
+        '202':
+          description: Delivered to the parent.
+        '403':
+          $ref: '#/components/responses/Error'
+  /v1/leases/{id}/terminate:
+    parameters:
+      - $ref: '#/components/parameters/LeaseId'
+    post:
+      operationId: terminate
+      summary: Graceful termination. Notify, wait, SIGTERM, then kill the whole tree.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TerminateRequest'
+      responses:
+        '200':
+          description: The termination record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Termination'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+  /v1/leases/{id}/kill:
+    parameters:
+      - $ref: '#/components/parameters/LeaseId'
+    post:
+      operationId: kill
+      summary: Kill the whole tree at once. Recorded as 499.
+      responses:
+        '200':
+          description: The termination record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Termination'
+        '403':
+          $ref: '#/components/responses/Error'
+  /v1/leases/{id}/notify:
+    parameters:
+      - $ref: '#/components/parameters/LeaseId'
+    post:
+      operationId: notify
+      summary: An ancestor planner delivers a control message to a descendant's inbox.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotifyRequest'
+      responses:
+        '202':
+          description: Queued.
+        '403':
+          $ref: '#/components/responses/Error'
+  /v1/leases/{id}/progress:
+    parameters:
+      - $ref: '#/components/parameters/LeaseId'
+    post:
+      operationId: reportProgress
+      summary: The harness adapter reports a progress beacon.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgressRequest'
+      responses:
+        '204':
+          description: Recorded.
+        '403':
+          $ref: '#/components/responses/Error'
+  /v1/leases/{id}/wait-children:
+    parameters:
+      - $ref: '#/components/parameters/LeaseId'
+    post:
+      operationId: waitChildren
+      summary: Wait until the whole subtree has ended and return each termination record.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaitChildrenRequest'
+      responses:
+        '200':
+          description: Termination records. done is false when the timeout came first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaitChildrenResponse'
+        '403':
+          $ref: '#/components/responses/Error'
+  /v1/leases/{id}/trace:
+    parameters:
+      - $ref: '#/components/parameters/LeaseId'
+    get:
+      operationId: getTrace
+      summary: Timeline of the lease. Usage series, events, injected control messages, tool beacons, termination.
+      responses:
+        '200':
+          description: The timeline.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trace'
+        '403':
+          $ref: '#/components/responses/Error'
+  /v1/leases/{id}/inbox:
+    parameters:
+      - $ref: '#/components/parameters/LeaseId'
+    get:
+      operationId: streamInbox
+      summary: Inbox of this node as server-sent events, for the harness adapter.
+      responses:
+        '200':
+          description: A stream of InboxMessage.
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/InboxMessage'
+        '403':
+          $ref: '#/components/responses/Error'
+  /v1/events:
+    get:
+      operationId: streamEvents
+      summary: Server-sent events for the caller's subtree, or for the leads an operator may see.
+      responses:
+        '200':
+          description: A stream of Event.
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/Event'
+  /metrics:
+    get:
+      operationId: getMetrics
+      summary: Prometheus metrics in text format.
+      responses:
+        '200':
+          description: Metrics.
+          content:
+            text/plain:
+              schema:
+                type: string
+components:
+  parameters:
+    LeaseId:
+      name: id
+      in: path
+      required: true
+      description: A lease id, or the alias self for the caller's own lease.
+      schema:
+        type: string
+  responses:
+    Error:
+      description: Refused. The body says why and, for validation failures, how to fix the request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Level:
+      type: string
+      enum: [hard, soft, monitor_only, unsupported]
+    MemBasis:
+      type: string
+      enum: [working_set, commit, phys_footprint]
+    State:
+      type: string
+      enum: [admitted, running, reaping, reaped]
+    RejectReason:
+      type: string
+      enum: [mem_budget, parent_budget, enforcement_unavailable, parent_not_running, capacity_shrunk, below_usage, below_allocated]
+    TerminationCode:
+      type: integer
+      enum: [200, 204, 408, 410, 413, 414, 451, 499, 500, 502, 503, 504, 520]
+    Capabilities:
+      type: object
+      properties:
+        membership:
+          $ref: '#/components/schemas/Level'
+        memory:
+          $ref: '#/components/schemas/Level'
+        cpu:
+          $ref: '#/components/schemas/Level'
+        pids:
+          $ref: '#/components/schemas/Level'
+        kill_tree:
+          $ref: '#/components/schemas/Level'
+        parent_death:
+          $ref: '#/components/schemas/Level'
+        escape_prevention:
+          $ref: '#/components/schemas/Level'
+        caller_identity:
+          $ref: '#/components/schemas/Level'
+    Host:
+      type: object
+      description: Sizes are bytes, measured in mem_basis.
+      properties:
+        backend:
+          type: string
+        mem_basis:
+          $ref: '#/components/schemas/MemBasis'
+        mem_total:
+          type: integer
+        reserve:
+          type: integer
+        external:
+          type: integer
+        effective_capacity:
+          type: integer
+        allocated:
+          type: integer
+        capacity_shrunk:
+          type: boolean
+        capabilities:
+          $ref: '#/components/schemas/Capabilities'
+    Envelope:
+      type: object
+      description: Ceilings per dimension. Zero means unlimited except for memory.
+      properties:
+        memory:
+          type: integer
+          description: Hard memory limit in bytes. Counted against the no-oversell ledger for top-level leases.
+        memory_self:
+          type: integer
+          description: Bytes kept for the node's own processes. Child leases cannot take it.
+        cpu:
+          type: number
+          description: Cores.
+        pids:
+          type: integer
+        wall:
+          type: integer
+          description: Seconds.
+        output:
+          type: integer
+          description: Bytes of stdout and stderr.
+    EnvelopePatch:
+      type: object
+      properties:
+        memory:
+          type: integer
+        memory_self:
+          type: integer
+        cpu:
+          type: number
+        pids:
+          type: integer
+        wall:
+          type: integer
+        output:
+          type: integer
+        dry_run:
+          type: boolean
+    Require:
+      type: object
+      properties:
+        memory:
+          $ref: '#/components/schemas/Level'
+        cpu:
+          $ref: '#/components/schemas/Level'
+        pids:
+          $ref: '#/components/schemas/Level'
+        kill_tree:
+          $ref: '#/components/schemas/Level'
+    OnNearLimit:
+      type: object
+      properties:
+        grow_to:
+          type: integer
+          description: Bytes. Applied on NEAR_LIMIT only if the parent has room.
+    AcquireRequest:
+      type: object
+      required: [envelope]
+      properties:
+        parent:
+          type: string
+        kind:
+          type: string
+        envelope:
+          $ref: '#/components/schemas/Envelope'
+        require:
+          $ref: '#/components/schemas/Require'
+        tty:
+          type: boolean
+        uid:
+          type: integer
+          description: Uid the lead runs as. Required and non-zero when the operator is root.
+        kill_order:
+          type: integer
+          description: Safety-net order hint. Lower is terminated first.
+        on_near_limit:
+          $ref: '#/components/schemas/OnNearLimit'
+        dry_run:
+          type: boolean
+    Usage:
+      type: object
+      properties:
+        memory:
+          type: integer
+        memory_peak:
+          type: integer
+        mem_basis:
+          $ref: '#/components/schemas/MemBasis'
+        cpu_seconds:
+          type: number
+        pids:
+          type: integer
+        sampled_at:
+          type: string
+          format: date-time
+    Lease:
+      type: object
+      properties:
+        id:
+          type: string
+        parent:
+          type: string
+        lead:
+          type: string
+        kind:
+          type: string
+        depth:
+          type: integer
+        state:
+          $ref: '#/components/schemas/State'
+        envelope:
+          $ref: '#/components/schemas/Envelope'
+        uid:
+          type: integer
+        owner_uid:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        children:
+          type: array
+          items:
+            type: string
+        kill_order:
+          type: integer
+        on_near_limit:
+          $ref: '#/components/schemas/OnNearLimit'
+        usage:
+          $ref: '#/components/schemas/Usage'
+        termination:
+          $ref: '#/components/schemas/Termination'
+    LeaseList:
+      type: object
+      properties:
+        leases:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lease'
+    Termination:
+      type: object
+      properties:
+        code:
+          $ref: '#/components/schemas/TerminationCode'
+        name:
+          type: string
+        lease:
+          type: string
+        kind:
+          type: string
+        parent:
+          type: string
+        dimension:
+          type: string
+        mem_basis:
+          $ref: '#/components/schemas/MemBasis'
+        peak:
+          type: integer
+          description: Bytes.
+        limit:
+          type: integer
+          description: Bytes.
+        enforcement:
+          $ref: '#/components/schemas/Level'
+        evidence:
+          type: object
+        message:
+          type: string
+        at:
+          type: string
+          format: date-time
+    SpawnRequest:
+      type: object
+      required: [argv]
+      properties:
+        argv:
+          type: array
+          items:
+            type: string
+        env:
+          type: array
+          items:
+            type: string
+        dir:
+          type: string
+    SpawnResponse:
+      type: object
+      properties:
+        pid:
+          type: integer
+    TerminateRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+        grace_seconds:
+          type: number
+        code:
+          type: integer
+          enum: [204, 499]
+        recursive:
+          type: boolean
+    WaitChildrenRequest:
+      type: object
+      properties:
+        self:
+          type: boolean
+          description: Also wait for the lease itself.
+        timeout_seconds:
+          type: number
+    WaitChildrenResponse:
+      type: object
+      properties:
+        done:
+          type: boolean
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Termination'
+    Suggestion:
+      type: object
+      properties:
+        memory:
+          type: integer
+        samples:
+          type: integer
+        default:
+          type: boolean
+          description: True when there were too few samples and the default was returned.
+        mem_basis:
+          $ref: '#/components/schemas/MemBasis'
+    Available:
+      type: object
+      properties:
+        lease:
+          type: string
+        mem_basis:
+          $ref: '#/components/schemas/MemBasis'
+        memory_limit:
+          type: integer
+        memory_self:
+          type: integer
+        memory_allocated:
+          type: integer
+        memory_free:
+          type: integer
+        live_children:
+          type: integer
+        host_effective_capacity:
+          type: integer
+        suggest:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/Suggestion'
+    ResizeAsk:
+      type: object
+      properties:
+        memory:
+          type: integer
+          description: Target bytes.
+        usage:
+          type: integer
+          description: Current bytes, filled in by subactld.
+    NotifyRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [TERMINATE_REQUESTED, NEAR_LIMIT, RESIZED, CAPACITY_SHRUNK]
+        reason:
+          type: string
+          description: The only free text, and only from an ancestor planner.
+    ProgressRequest:
+      type: object
+      properties:
+        state:
+          type: string
+          enum: [working, awaiting_input, done]
+        tool:
+          type: string
+          description: Tool name only. Arguments are never reported.
+        seq:
+          type: integer
+        turns:
+          type: integer
+        result:
+          type: string
+          description: With state done, a path inside the lease's scratch directory.
+        tokens:
+          type: integer
+          description: Self-reported LLM tokens. Kept apart from measured data.
+    InboxMessage:
+      type: object
+      properties:
+        seq:
+          type: integer
+        type:
+          type: string
+          enum: [TERMINATE_REQUESTED, NEAR_LIMIT, RESIZED, CAPACITY_SHRUNK]
+        source:
+          type: string
+          description: subactld, or the id of the ancestor lease that sent it.
+        reason:
+          type: string
+        deadline:
+          type: string
+          format: date-time
+        at:
+          type: string
+          format: date-time
+    Event:
+      type: object
+      properties:
+        seq:
+          type: integer
+        type:
+          type: string
+        lease:
+          type: string
+        at:
+          type: string
+          format: date-time
+        data:
+          type: object
+    Trace:
+      type: object
+      properties:
+        lease:
+          type: string
+        samples:
+          type: array
+          items:
+            $ref: '#/components/schemas/Usage'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        termination:
+          $ref: '#/components/schemas/Termination'
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          enum: [invalid_argument, rejected, out_of_subtree, self_resize_forbidden, not_found, conflict, not_implemented, internal]
+        reason:
+          $ref: '#/components/schemas/RejectReason'
+        message:
+          type: string
+        field:
+          type: string
+        expected:
+          type: string
+        example:
+          type: string

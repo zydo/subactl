@@ -1,0 +1,702 @@
+// Package daemon is subactld: the lease lifecycle on top of the ledger and
+// a backend, and the HTTP API in front of it.
+package daemon
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"regexp"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/zydo/subactl/api"
+	"github.com/zydo/subactl/internal/backend"
+	"github.com/zydo/subactl/internal/ledger"
+)
+
+// Config configures a Manager.
+type Config struct {
+	Backend  backend.Backend
+	Capacity int64 // effective capacity in bytes
+	MemTotal int64
+	Reserve  int64
+	// DefaultGrace is how long terminate waits before SIGTERM (default 30s).
+	DefaultGrace time.Duration
+	// TermWait is how long terminate waits after SIGTERM (default 10s).
+	TermWait time.Duration
+	Log      *slog.Logger
+}
+
+// Caller is who is making a request. A caller inside an acgroup is that
+// node; any other caller is an operator, authorised by uid.
+type Caller struct {
+	Lease api.LeaseID // empty for an operator
+	UID   int
+	Admin bool
+}
+
+// Error is an API error with its HTTP status.
+type Error struct {
+	Status int
+	API    api.Error
+}
+
+func (e *Error) Error() string { return e.API.Error() }
+
+func invalid(field, expected, example, format string, a ...any) *Error {
+	return &Error{http.StatusBadRequest, api.Error{
+		Code: api.ErrInvalidArgument, Message: fmt.Sprintf(format, a...),
+		Field: field, Expected: expected, Example: example,
+	}}
+}
+
+func apiErr(status int, code, format string, a ...any) *Error {
+	return &Error{status, api.Error{Code: code, Message: fmt.Sprintf(format, a...)}}
+}
+
+type runtime struct {
+	group backend.ACGroup
+	proc  backend.Proc
+	done  chan struct{} // closed once the lease is reaped
+	// pending is the code requested by terminate. If the main process exits
+	// while it is set, the exit is attributed to that terminate.
+	pending int
+	step    string
+}
+
+// Manager owns every lease from acquire to reaped.
+type Manager struct {
+	cfg Config
+	be  backend.Backend
+	led *ledger.Ledger
+	log *slog.Logger
+
+	admit sync.Mutex // serialises ledger-plus-backend changes to reservations
+	mu    sync.Mutex
+	rt    map[api.LeaseID]*runtime
+}
+
+// NewManager starts fail-closed: every acgroup the backend still reports is
+// left over from a previous daemon, so it is killed as a whole and destroyed
+// before any request is served. Running leases are never adopted.
+func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
+	if cfg.DefaultGrace == 0 {
+		cfg.DefaultGrace = 30 * time.Second
+	}
+	if cfg.TermWait == 0 {
+		cfg.TermWait = 10 * time.Second
+	}
+	if cfg.Log == nil {
+		cfg.Log = slog.New(slog.DiscardHandler)
+	}
+	m := &Manager{
+		cfg: cfg, be: cfg.Backend, log: cfg.Log,
+		led: ledger.New(cfg.Capacity), rt: map[api.LeaseID]*runtime{},
+	}
+	if err := m.failClosed(ctx); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (m *Manager) failClosed(ctx context.Context) error {
+	refs, err := m.be.List(ctx)
+	if err != nil {
+		return fmt.Errorf("fail-closed cleanup: list acgroups: %w", err)
+	}
+	for _, ref := range refs {
+		rep, err := m.be.KillTree(ctx, backend.Handle(ref))
+		m.log.Warn("fail-closed: killed leftover acgroup", "lease", ref.Lease,
+			"code", api.CodeSubactlInternal, "killed", rep.Killed, "remaining", rep.Remaining, "err", err)
+	}
+	// Children must go before parents and List gives no order, so sweep
+	// until a pass makes no progress.
+	for len(refs) > 0 {
+		var left []backend.ACGroupRef
+		var last error
+		for _, ref := range refs {
+			if err := m.be.Destroy(ctx, backend.Handle(ref)); err != nil {
+				left, last = append(left, ref), err
+			}
+		}
+		if len(left) == len(refs) {
+			return fmt.Errorf("fail-closed cleanup: %d acgroups could not be destroyed: %w", len(left), last)
+		}
+		refs = left
+	}
+	return nil
+}
+
+func newID() api.LeaseID {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic(err)
+	}
+	return api.LeaseID("ls_" + hex.EncodeToString(b[:]))
+}
+
+func (m *Manager) runtime(id api.LeaseID) *runtime {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.rt[id]
+}
+
+// Host returns the machine-wide view.
+func (m *Manager) Host() api.Host {
+	eff, alloc, shrunk := m.led.Totals()
+	return api.Host{
+		Backend: m.be.Name(), MemBasis: m.be.MemBasis(),
+		MemTotal: m.cfg.MemTotal, Reserve: m.cfg.Reserve,
+		EffectiveCapacity: eff, Allocated: alloc, CapacityShrunk: shrunk,
+		Capabilities: m.be.Capabilities(),
+	}
+}
+
+// resolve finds the lease named by id (or "self") and checks that the
+// caller may see it: a node sees its own subtree, an operator sees the lead
+// trees it started.
+func (m *Manager) resolve(c Caller, id api.LeaseID) (api.Lease, error) {
+	if id == api.Self {
+		if c.Lease == "" {
+			return api.Lease{}, invalid("id", "a lease id", "ls_7f3a9c21",
+				"\"self\" names the caller's own lease, but the caller is an operator outside every lease")
+		}
+		id = c.Lease
+	}
+	ls, ok := m.led.Get(id)
+	if !ok {
+		return api.Lease{}, apiErr(http.StatusNotFound, api.ErrNotFound, "no lease %s", id)
+	}
+	if c.Lease != "" {
+		if !m.led.InSubtree(c.Lease, id) {
+			return api.Lease{}, apiErr(http.StatusForbidden, api.ErrOutOfSubtree, "lease %s is outside the subtree of %s", id, c.Lease)
+		}
+	} else if !c.Admin && ls.OwnerUID != c.UID {
+		return api.Lease{}, apiErr(http.StatusForbidden, api.ErrOutOfSubtree, "lease %s belongs to another user", id)
+	}
+	return ls, nil
+}
+
+var kindRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
+
+func validateEnvelope(e api.Envelope) *Error {
+	switch {
+	case e.Memory <= 0:
+		return invalid("envelope.memory", "bytes > 0", "8589934592", "memory must be positive, got %d", e.Memory)
+	case e.MemorySelf < 0 || e.MemorySelf > e.Memory:
+		return invalid("envelope.memory_self", "0 <= memory_self <= memory", "1073741824", "memory_self %d is outside [0, %d]", e.MemorySelf, e.Memory)
+	case e.CPU < 0:
+		return invalid("envelope.cpu", "cores >= 0 (0 is unlimited)", "2", "cpu must not be negative")
+	case e.Pids < 0:
+		return invalid("envelope.pids", "count >= 0 (0 is unlimited)", "512", "pids must not be negative")
+	case e.Wall < 0:
+		return invalid("envelope.wall", "seconds >= 0 (0 is unlimited)", "1800", "wall must not be negative")
+	case e.Output < 0:
+		return invalid("envelope.output", "bytes >= 0 (0 is unlimited)", "104857600", "output must not be negative")
+	}
+	return nil
+}
+
+// Acquire admits a lease and creates its acgroup. Nothing runs in it yet.
+func (m *Manager) Acquire(ctx context.Context, c Caller, req api.AcquireRequest) (api.Lease, error) {
+	parent := req.Parent
+	if c.Lease != "" && parent == "" {
+		parent = c.Lease // a node can only create leases under itself
+	}
+	p := ledger.Params{Kind: req.Kind, Envelope: req.Envelope, KillOrder: req.KillOrder, OnNearLimit: req.OnNearLimit, DryRun: req.DryRun}
+	if parent != "" {
+		pl, err := m.resolve(c, parent)
+		if err != nil {
+			return api.Lease{}, err
+		}
+		p.Parent = pl.ID
+		if req.UID != nil {
+			return api.Lease{}, invalid("uid", "omitted for a child lease", "", "a child lease runs as its parent's uid")
+		}
+		if req.TTY {
+			return api.Lease{}, invalid("tty", "false for a child lease", "false", "only a lead gets a pty; child agents are headless")
+		}
+	} else {
+		p.OwnerUID, p.UID = c.UID, c.UID
+		if req.UID != nil {
+			p.UID = *req.UID
+		}
+		switch {
+		case p.UID == 0:
+			return api.Lease{}, invalid("uid", "a non-root uid", "1000", "an agent never runs as root; name the uid the lead should run as")
+		case p.UID != c.UID && c.UID != 0 && !c.Admin:
+			return api.Lease{}, invalid("uid", "your own uid", fmt.Sprint(c.UID), "only root may start a lead as another user")
+		}
+		if p.Envelope.Memory == 0 {
+			if p.Envelope.Memory = m.led.DefaultLeadMemory(); p.Envelope.Memory == 0 {
+				return api.Lease{}, &Error{http.StatusConflict, api.Error{Code: api.ErrRejected, Reason: api.ReasonMemBudget,
+					Message: "no unallocated capacity is left for a default lead envelope"}}
+			}
+		}
+	}
+	if req.Kind != "" && !kindRE.MatchString(req.Kind) {
+		return api.Lease{}, invalid("kind", "lower-case letters, digits, '-' and '_', at most 32", "worker", "invalid kind %q", req.Kind)
+	}
+	if err := validateEnvelope(p.Envelope); err != nil {
+		return api.Lease{}, err
+	}
+	if g := req.OnNearLimit; g != nil && g.GrowTo <= p.Envelope.Memory {
+		return api.Lease{}, invalid("on_near_limit.grow_to", "bytes greater than envelope.memory", fmt.Sprint(p.Envelope.Memory*2), "grow_to must exceed the initial memory limit")
+	}
+	if r := req.Require; r != nil {
+		caps := m.be.Capabilities()
+		for _, d := range []struct {
+			name      string
+			want, got api.Level
+		}{{"memory", r.Memory, caps.Memory}, {"cpu", r.CPU, caps.CPU}, {"pids", r.Pids, caps.Pids}, {"kill_tree", r.KillTree, caps.KillTree}} {
+			if d.want == "" {
+				continue
+			}
+			if !d.want.Valid() {
+				return api.Lease{}, invalid("require."+d.name, "hard, soft, monitor_only or unsupported", "hard", "unknown enforcement level %q", d.want)
+			}
+			if !d.got.Satisfies(d.want) {
+				return api.Lease{}, &Error{http.StatusConflict, api.Error{Code: api.ErrRejected, Reason: api.ReasonEnforcementUnavailable,
+					Message: fmt.Sprintf("require.%s is %s, but backend %s only reaches %s", d.name, d.want, m.be.Name(), d.got)}}
+			}
+		}
+	}
+
+	m.admit.Lock()
+	defer m.admit.Unlock()
+	p.ID = newID()
+	for _, taken := m.led.Get(p.ID); taken; _, taken = m.led.Get(p.ID) {
+		p.ID = newID()
+	}
+	ls, err := m.led.Acquire(p)
+	if err != nil {
+		return api.Lease{}, ledgerErr(err)
+	}
+	if req.DryRun {
+		return ls, nil
+	}
+	g, err := m.be.Create(ctx, ls.ID, backend.ACGroupRef{Lease: ls.Parent}, ls.Envelope)
+	if err != nil {
+		m.led.Abort(ls.ID)
+		return api.Lease{}, apiErr(http.StatusInternalServerError, api.ErrInternal, "create acgroup: %v", err)
+	}
+	m.mu.Lock()
+	m.rt[ls.ID] = &runtime{group: g, done: make(chan struct{})}
+	m.mu.Unlock()
+	m.log.Info("lease admitted", "lease", ls.ID, "parent", ls.Parent, "kind", ls.Kind, "memory", ls.Envelope.Memory)
+	return ls, nil
+}
+
+func ledgerErr(err error) error {
+	var rej *ledger.Rejection
+	if errors.As(err, &rej) {
+		return &Error{http.StatusConflict, api.Error{Code: api.ErrRejected, Reason: rej.Reason, Message: rej.Message}}
+	}
+	return apiErr(http.StatusInternalServerError, api.ErrInternal, "%v", err)
+}
+
+// Spawn starts the main process of an admitted lease inside its acgroup.
+func (m *Manager) Spawn(ctx context.Context, c Caller, id api.LeaseID, req api.SpawnRequest) (api.SpawnResponse, error) {
+	ls, err := m.resolve(c, id)
+	if err != nil {
+		return api.SpawnResponse{}, err
+	}
+	if len(req.Argv) == 0 || req.Argv[0] == "" {
+		return api.SpawnResponse{}, invalid("argv", "a non-empty command", `["mini-agent","--task","t.md"]`, "argv is empty")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	rt := m.rt[ls.ID]
+	if rt == nil || rt.proc != nil || m.led.Running(ls.ID) != nil {
+		return api.SpawnResponse{}, apiErr(http.StatusConflict, api.ErrConflict, "lease %s is not waiting for its main process; a lease has exactly one", ls.ID)
+	}
+	proc, err := m.be.Spawn(ctx, rt.group, backend.Cmd{Argv: req.Argv, Env: req.Env, Dir: req.Dir, UID: ls.UID})
+	if err != nil {
+		// The lease is running in the ledger but has no process: reap it.
+		go m.reap(ls.ID, api.CodeSubactlInternal, map[string]any{"spawn_error": err.Error()})
+		return api.SpawnResponse{}, apiErr(http.StatusInternalServerError, api.ErrInternal, "spawn: %v", err)
+	}
+	rt.proc = proc
+	go m.onMainExit(ls.ID, proc.Wait)
+	return api.SpawnResponse{Pid: proc.Pid()}, nil
+}
+
+// onMainExit runs when the main process of a lease exits, for any reason.
+// The lease is reaped at once: no descendant survives its main process.
+func (m *Manager) onMainExit(id api.LeaseID, wait func() backend.ExitStatus) {
+	st := wait()
+	ev := map[string]any{"exit_code": st.Code}
+	code := api.CodeCompleted
+	if st.Signal != 0 {
+		ev["signal"] = st.Signal
+	}
+	if st.Signal != 0 || st.Code != 0 {
+		// Not our signal and not a clean exit: an external abort or a crash.
+		code = api.CodeExternalAbort
+	}
+	m.mu.Lock()
+	if rt := m.rt[id]; rt != nil && rt.pending != 0 {
+		code, ev["step"] = rt.pending, rt.step
+	}
+	m.mu.Unlock()
+	m.reap(id, code, ev)
+}
+
+// reap ends a lease and its whole subtree. It is safe to call from several
+// goroutines for the same lease: the ledger lets only the first cause win.
+func (m *Manager) reap(id api.LeaseID, code int, evidence map[string]any) {
+	// admit is held so that every marked lease has finished Acquire and has
+	// its runtime; a child caught mid-creation is either complete or absent.
+	m.admit.Lock()
+	marked := m.led.BeginReap(id, code)
+	m.admit.Unlock()
+	if len(marked) == 0 {
+		return
+	}
+	ctx := context.Background()
+	root := m.runtime(id)
+	peaks := map[api.LeaseID]api.Usage{}
+	for _, mk := range marked {
+		if u, err := m.be.Sample(ctx, m.runtime(mk.ID).group); err == nil {
+			peaks[mk.ID] = u
+		}
+	}
+	rep, killErr := m.be.KillTree(ctx, root.group)
+	for _, mk := range marked { // children before parents
+		rt := m.runtime(mk.ID)
+		ls, _ := m.led.Get(mk.ID)
+		// Children that were already being reaped on their own must finish
+		// first; they are not in marked.
+		for _, child := range ls.Children {
+			if crt := m.runtime(child); crt != nil {
+				<-crt.done
+			}
+		}
+		ev := map[string]any{}
+		final := mk.Code
+		if mk.ID == id {
+			for k, v := range evidence {
+				ev[k] = v
+			}
+			ev["reaped_pids"] = rep.Killed
+			if killErr != nil || rep.Remaining > 0 {
+				final = api.CodeReapIncomplete
+				ev["remaining_pids"], ev["intended_code"] = rep.Remaining, mk.Code
+				if killErr != nil {
+					ev["kill_error"] = killErr.Error()
+				}
+			}
+		} else {
+			ev["cause"] = fmt.Sprintf("ancestor %s ended with %d %s", id, code, api.CodeName(code))
+		}
+		if err := m.be.Destroy(ctx, rt.group); err != nil && final != api.CodeReapIncomplete {
+			final = api.CodeReapIncomplete
+			ev["destroy_error"], ev["intended_code"] = err.Error(), mk.Code
+		}
+		term := m.record(ls, final, peaks[mk.ID], ev)
+		if err := m.led.Finish(mk.ID, term); err != nil {
+			m.log.Error("ledger refused to finish a lease", "lease", mk.ID, "err", err)
+		}
+		m.mu.Lock()
+		delete(m.rt, mk.ID)
+		m.mu.Unlock()
+		close(rt.done)
+		m.log.Info("lease reaped", "lease", mk.ID, "code", final, "name", term.Name)
+	}
+}
+
+func (m *Manager) record(ls api.Lease, code int, u api.Usage, ev map[string]any) api.Termination {
+	t := api.Termination{
+		Code: code, Name: api.CodeName(code), Lease: ls.ID, Kind: ls.Kind, Parent: ls.Parent,
+		MemBasis: m.be.MemBasis(), Peak: u.MemoryPeak, Limit: ls.Envelope.Memory,
+		Enforcement: m.be.Capabilities().Memory, Evidence: ev, At: time.Now(),
+	}
+	who := "lease " + string(ls.ID)
+	if ls.Kind != "" {
+		who = ls.Kind + " " + string(ls.ID)
+	}
+	switch code {
+	case api.CodeCompleted:
+		t.Message = who + " completed: its main process exited with status 0."
+	case api.CodeReleased:
+		t.Message = who + " was released by its planner."
+	case api.CodeKilled:
+		t.Message = who + " was terminated by its planner."
+	case api.CodeParentDied:
+		t.Message = who + " was reaped because an ancestor ended."
+	case api.CodeExternalAbort:
+		t.Message = who + " ended abnormally: its main process was killed from outside or crashed."
+	case api.CodeReapIncomplete:
+		t.Message = who + " could not be fully reaped: processes remain in its acgroup."
+	case api.CodeSubactlInternal:
+		t.Message = who + " was ended by an internal subactld error."
+	default:
+		t.Message = who + " ended with " + t.Name + "."
+	}
+	return t
+}
+
+// withUsage attaches a fresh sample to a live lease.
+func (m *Manager) withUsage(ctx context.Context, ls api.Lease) api.Lease {
+	if rt := m.runtime(ls.ID); rt != nil {
+		if u, err := m.be.Sample(ctx, rt.group); err == nil {
+			ls.Usage = &u
+		}
+	}
+	return ls
+}
+
+// Get returns one lease.
+func (m *Manager) Get(ctx context.Context, c Caller, id api.LeaseID) (api.Lease, error) {
+	ls, err := m.resolve(c, id)
+	if err != nil {
+		return api.Lease{}, err
+	}
+	return m.withUsage(ctx, ls), nil
+}
+
+// List returns whole trees in pre-order: a node's own subtree, or the lead
+// trees an operator may see, optionally narrowed to one lead.
+func (m *Manager) List(ctx context.Context, c Caller, lead api.LeaseID) ([]api.Lease, error) {
+	var roots []api.LeaseID
+	switch {
+	case c.Lease != "":
+		roots = []api.LeaseID{c.Lease}
+	case lead != "":
+		ls, err := m.resolve(c, lead)
+		if err != nil {
+			return nil, err
+		}
+		roots = []api.LeaseID{ls.Lead}
+	default:
+		roots = m.led.Leads()
+	}
+	out := []api.Lease{}
+	for _, r := range roots {
+		tree := m.led.Subtree(r)
+		if len(tree) == 0 || (c.Lease == "" && !c.Admin && tree[0].OwnerUID != c.UID) {
+			continue
+		}
+		for _, ls := range tree {
+			out = append(out, m.withUsage(ctx, ls))
+		}
+	}
+	return out, nil
+}
+
+// Available returns the remaining budget of a subtree.
+func (m *Manager) Available(c Caller, id api.LeaseID) (api.Available, error) {
+	ls, err := m.resolve(c, id)
+	if err != nil {
+		return api.Available{}, err
+	}
+	a, _ := m.led.Available(ls.ID)
+	a.MemBasis = m.be.MemBasis()
+	return a, nil
+}
+
+// Resize adjusts the envelope of a live lease. A node may resize its
+// descendants but never itself; it must ask its parent.
+func (m *Manager) Resize(ctx context.Context, c Caller, id api.LeaseID, p api.EnvelopePatch) (api.Lease, error) {
+	ls, err := m.resolve(c, id)
+	if err != nil {
+		return api.Lease{}, err
+	}
+	if ls.ID == c.Lease {
+		return api.Lease{}, apiErr(http.StatusForbidden, api.ErrSelfResize, "a node cannot resize itself; use resize-request to ask the parent")
+	}
+	next := ls.Envelope
+	for _, f := range []struct {
+		src *int64
+		dst *int64
+	}{{p.Memory, &next.Memory}, {p.MemorySelf, &next.MemorySelf}, {p.Pids, &next.Pids}, {p.Wall, &next.Wall}, {p.Output, &next.Output}} {
+		if f.src != nil {
+			*f.dst = *f.src
+		}
+	}
+	if p.CPU != nil {
+		next.CPU = *p.CPU
+	}
+	if err := validateEnvelope(next); err != nil {
+		return api.Lease{}, err
+	}
+	m.admit.Lock()
+	defer m.admit.Unlock()
+	rt := m.runtime(ls.ID)
+	if rt == nil {
+		return api.Lease{}, apiErr(http.StatusConflict, api.ErrConflict, "lease %s has ended", ls.ID)
+	}
+	var usage int64
+	if u, err := m.be.Sample(ctx, rt.group); err == nil {
+		usage = u.Memory
+	}
+	out, err := m.led.Resize(ls.ID, p, usage)
+	if err != nil {
+		return api.Lease{}, ledgerErr(err)
+	}
+	if p.DryRun {
+		return out, nil
+	}
+	if err := m.be.SetLimits(ctx, rt.group, out.Envelope); err != nil {
+		// Put the old envelope back. admit is held, so the room is still there.
+		old := ls.Envelope
+		back := api.EnvelopePatch{Memory: &old.Memory, MemorySelf: &old.MemorySelf, CPU: &old.CPU, Pids: &old.Pids, Wall: &old.Wall, Output: &old.Output}
+		if _, rerr := m.led.Resize(ls.ID, back, 0); rerr != nil {
+			m.log.Error("could not restore envelope after a failed resize", "lease", ls.ID, "err", rerr)
+		}
+		return api.Lease{}, apiErr(http.StatusInternalServerError, api.ErrInternal, "apply limits: %v", err)
+	}
+	m.log.Info("lease resized", "lease", ls.ID, "memory", out.Envelope.Memory)
+	return m.withUsage(ctx, out), nil
+}
+
+// waitReaped blocks until the lease is reaped or ctx ends.
+func (m *Manager) waitReaped(ctx context.Context, id api.LeaseID) (api.Termination, bool) {
+	if rt := m.runtime(id); rt != nil {
+		select {
+		case <-rt.done:
+		case <-ctx.Done():
+			return api.Termination{}, false
+		}
+	}
+	// No runtime means the lease was already reaped.
+	if ls, ok := m.led.Get(id); ok && ls.Termination != nil {
+		return *ls.Termination, true
+	}
+	return api.Termination{}, false
+}
+
+// Kill ends the whole tree at once, recorded as 499.
+func (m *Manager) Kill(ctx context.Context, c Caller, id api.LeaseID) (api.Termination, error) {
+	ls, err := m.resolve(c, id)
+	if err != nil {
+		return api.Termination{}, err
+	}
+	m.reap(ls.ID, api.CodeKilled, map[string]any{"step": "kill"})
+	return m.terminated(ctx, ls.ID)
+}
+
+func (m *Manager) terminated(ctx context.Context, id api.LeaseID) (api.Termination, error) {
+	t, ok := m.waitReaped(ctx, id)
+	if !ok {
+		return api.Termination{}, apiErr(http.StatusGatewayTimeout, api.ErrInternal, "gave up waiting for lease %s to be reaped; it is still being terminated", id)
+	}
+	return t, nil
+}
+
+// Terminate ends a lease gracefully: wait for it to exit by itself within
+// the grace period, then SIGTERM its main process, then kill the whole
+// tree. The ladder runs to the end even if the caller goes away.
+//
+// TODO(M4): step one also delivers TERMINATE_REQUESTED to the lease's inbox.
+func (m *Manager) Terminate(ctx context.Context, c Caller, id api.LeaseID, req api.TerminateRequest) (api.Termination, error) {
+	ls, err := m.resolve(c, id)
+	if err != nil {
+		return api.Termination{}, err
+	}
+	code := req.Code
+	if code == 0 {
+		code = api.CodeKilled
+	}
+	if code != api.CodeReleased && code != api.CodeKilled {
+		return api.Termination{}, invalid("code", "204 (released) or 499 (killed)", "204", "terminate cannot record code %d", req.Code)
+	}
+	grace := m.cfg.DefaultGrace
+	if g := req.GraceSeconds; g != nil {
+		if *g < 0 || *g > 3600 {
+			return api.Termination{}, invalid("grace_seconds", "0 to 3600", "30", "grace_seconds %v is out of range", *g)
+		}
+		grace = time.Duration(*g * float64(time.Second))
+	}
+	m.mu.Lock()
+	rt := m.rt[ls.ID]
+	start := rt != nil && rt.pending == 0
+	var proc backend.Proc
+	if start {
+		rt.pending, rt.step, proc = code, "grace", rt.proc
+	}
+	m.mu.Unlock()
+	if start {
+		go m.ladder(ls.ID, rt, proc, code, grace)
+	}
+	return m.terminated(ctx, ls.ID)
+}
+
+func (m *Manager) ladder(id api.LeaseID, rt *runtime, proc backend.Proc, code int, grace time.Duration) {
+	setStep := func(s string) {
+		m.mu.Lock()
+		rt.step = s
+		m.mu.Unlock()
+	}
+	if proc == nil { // admitted but never spawned: nothing to wait for
+		m.reap(id, code, map[string]any{"step": "not_started"})
+		return
+	}
+	if waitOr(rt.done, grace) {
+		return
+	}
+	setStep("sigterm")
+	_ = proc.Signal(syscall.SIGTERM)
+	if waitOr(rt.done, m.cfg.TermWait) {
+		return
+	}
+	setStep("kill_tree")
+	m.reap(id, code, map[string]any{"step": "kill_tree"})
+}
+
+// waitOr reports whether done closed within d.
+func waitOr(done <-chan struct{}, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-done:
+		return true
+	case <-t.C:
+		return false
+	}
+}
+
+// WaitChildren waits until every descendant of the lease has been reaped
+// (and the lease itself when asked) and returns their termination records.
+func (m *Manager) WaitChildren(ctx context.Context, c Caller, id api.LeaseID, req api.WaitChildrenRequest) (api.WaitChildrenResponse, error) {
+	ls, err := m.resolve(c, id)
+	if err != nil {
+		return api.WaitChildrenResponse{}, err
+	}
+	if req.TimeoutSeconds < 0 {
+		return api.WaitChildrenResponse{}, invalid("timeout_seconds", "seconds >= 0 (0 waits forever)", "600", "timeout_seconds must not be negative")
+	}
+	if req.TimeoutSeconds > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutSeconds*float64(time.Second)))
+		defer cancel()
+	}
+	out := api.WaitChildrenResponse{Done: true, Results: []api.Termination{}}
+	for _, l := range m.led.Subtree(ls.ID) {
+		if l.ID == ls.ID && !req.Self {
+			continue
+		}
+		t, ok := m.waitReaped(ctx, l.ID)
+		if !ok {
+			out.Done = false
+			continue
+		}
+		out.Results = append(out.Results, t)
+	}
+	return out, nil
+}
+
+// Shutdown reaps every lease with 500 SUBACTL_INTERNAL. A daemon that stops
+// leaves nothing running, exactly as a daemon that crashes leaves nothing
+// running after its restart.
+func (m *Manager) Shutdown() {
+	for _, id := range m.led.Leads() {
+		m.reap(id, api.CodeSubactlInternal, map[string]any{"step": "daemon_shutdown"})
+	}
+}

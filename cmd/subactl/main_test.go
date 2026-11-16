@@ -1,0 +1,259 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/zydo/subactl/api"
+	"github.com/zydo/subactl/client"
+	"github.com/zydo/subactl/internal/backend"
+	"github.com/zydo/subactl/internal/daemon"
+)
+
+// daemonOnSocket serves a real subactld (fake backend) on a Unix socket.
+// Identity comes from the socket's peer credentials, as in production, so
+// the test process is an operator.
+func daemonOnSocket(t *testing.T) (socket string, f *backend.Fake) {
+	t.Helper()
+	// t.TempDir is too long for a Unix socket path on macOS.
+	dir, err := os.MkdirTemp("/tmp", "subactl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	socket = filepath.Join(dir, "s")
+	f = backend.NewFake()
+	m, err := daemon.NewManager(context.Background(), daemon.Config{Backend: f, Capacity: 32 << 30, TermWait: 50 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &http.Server{Handler: daemon.NewServer(m, nil), ConnContext: daemon.ConnContext}
+	go srv.Serve(ln)
+	t.Cleanup(func() { srv.Close() })
+	return socket, f
+}
+
+type harness struct {
+	t      *testing.T
+	socket string
+	uid    []string
+}
+
+// cli runs one subactl command and returns its exit code and output.
+func (h harness) cli(args ...string) (code int, stdout, stderr string) {
+	h.t.Helper()
+	var out, errb bytes.Buffer
+	code = run(append([]string{"--socket", h.socket}, args...), &out, &errb)
+	return code, out.String(), errb.String()
+}
+
+// ok runs a command that must succeed and decodes its JSON output into v.
+func (h harness) ok(v any, args ...string) {
+	h.t.Helper()
+	code, out, errs := h.cli(args...)
+	if code != 0 {
+		h.t.Fatalf("subactl %s: exit %d\n%s%s", strings.Join(args, " "), code, out, errs)
+	}
+	if v != nil {
+		if err := json.Unmarshal([]byte(out), v); err != nil {
+			h.t.Fatalf("subactl %s: bad JSON: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+}
+
+func TestEndToEnd(t *testing.T) {
+	socket, f := daemonOnSocket(t)
+	h := harness{t: t, socket: socket}
+	if os.Getuid() == 0 { // root must name the uid an agent runs as
+		h.uid = []string{"--uid", "1000"}
+	}
+	lead := func(args ...string) []string { return append(append([]string{"run"}, h.uid...), args...) }
+
+	var host api.Host
+	h.ok(&host, "host")
+	if host.Backend != "fake" || host.EffectiveCapacity != 32<<30 || host.Capabilities.Memory != api.LevelHard {
+		t.Fatalf("host %+v", host)
+	}
+
+	// A dry run checks admission and leaves nothing behind.
+	var dry api.Lease
+	h.ok(&dry, lead("--dry-run", "--memory", "4G")...)
+	var leases []api.Lease
+	h.ok(&leases, "ls")
+	if dry.Envelope.Memory != 4<<30 || len(leases) != 0 {
+		t.Fatalf("dry run: %+v, %d leases", dry, len(leases))
+	}
+
+	var ld api.Lease
+	h.ok(&ld, lead("--wait=false", "--memory", "8G", "--memory-self", "1G", "--kind", "lead", "--", "agent", "--flag")...)
+	if ld.OwnerUID != os.Getuid() || ld.Parent != "" || ld.Lead != ld.ID {
+		t.Fatalf("lead %+v", ld)
+	}
+	id := string(ld.ID)
+
+	var kid api.Lease
+	h.ok(&kid, "spawn", "--parent", id, "--memory", "2G", "--kind", "worker", "--wall", "30m", "--", "worker")
+	if kid.Parent != ld.ID || kid.Depth != 1 || kid.Envelope.Wall != 1800 {
+		t.Fatalf("child %+v", kid)
+	}
+
+	var avail api.Available
+	h.ok(&avail, "available", id)
+	if avail.MemoryFree != 5<<30 || avail.LiveChildren != 1 {
+		t.Fatalf("available %+v", avail)
+	}
+
+	// A refusal exits 1 with a structured reason on stderr.
+	code, _, errs := h.cli("spawn", "--parent", id, "--memory", "6G", "--", "worker")
+	var refusal api.Error
+	if json.Unmarshal([]byte(errs), &refusal); code != 1 || refusal.Code != api.ErrRejected || refusal.Reason != api.ReasonParentBudget {
+		t.Fatalf("exit %d, stderr %s", code, errs)
+	}
+	// A node cannot use "self" from outside a lease, and says how to fix it.
+	code, _, errs = h.cli("available")
+	if json.Unmarshal([]byte(errs), &refusal); code != 1 || refusal.Field != "id" || refusal.Example == "" {
+		t.Fatalf("exit %d, stderr %s", code, errs)
+	}
+
+	var resized api.Lease
+	h.ok(&resized, "resize", string(kid.ID), "--memory", "3G", "--pids", "128")
+	if resized.Envelope.Memory != 3<<30 || resized.Envelope.Wall != 1800 || f.Limits(kid.ID).Pids != 128 {
+		t.Fatalf("resize %+v", resized.Envelope)
+	}
+
+	h.ok(&leases, "ls", "--lead", id)
+	if len(leases) != 2 || leases[0].ID != ld.ID || leases[1].Usage == nil {
+		t.Fatalf("ls %+v", leases)
+	}
+
+	var term api.Termination
+	h.ok(&term, "terminate", string(kid.ID), "--grace", "0s", "--code", "204")
+	if term.Code != api.CodeReleased || term.Evidence["step"] != "sigterm" {
+		t.Fatalf("terminate %+v", term)
+	}
+	var got api.Lease
+	h.ok(&got, "get", string(kid.ID))
+	if got.State != api.StateReaped || got.Termination == nil {
+		t.Fatalf("get %+v", got)
+	}
+
+	h.ok(&term, "kill", id)
+	if term.Code != api.CodeKilled {
+		t.Fatalf("kill %+v", term)
+	}
+	var waited api.WaitChildrenResponse
+	code, out, _ := h.cli("wait-children", id, "--self")
+	if json.Unmarshal([]byte(out), &waited); code != 3 || !waited.Done || len(waited.Results) != 2 {
+		t.Fatalf("wait-children exit %d: %s", code, out)
+	}
+	if refs, _ := f.List(context.Background()); len(refs) != 0 {
+		t.Fatalf("acgroups left: %v", refs)
+	}
+}
+
+// run blocks until the lead ends and exits by its termination code.
+func TestRunWaits(t *testing.T) {
+	socket, f := daemonOnSocket(t)
+	h := harness{t: t, socket: socket}
+	args := []string{"run", "--memory", "1G"}
+	if os.Getuid() == 0 {
+		args = append(args, "--uid", "1000")
+	}
+	for _, tc := range []struct {
+		status   backend.ExitStatus
+		wantExit int
+		wantCode int
+	}{{backend.ExitStatus{}, 0, api.CodeCompleted}, {backend.ExitStatus{Signal: 9}, 3, api.CodeExternalAbort}} {
+		go func() {
+			c := client.New(socket)
+			for range 200 {
+				leases, _ := c.Leases(context.Background(), "")
+				for _, ls := range leases {
+					if ls.State == api.StateRunning && f.ExitIfAlive(ls.ID, tc.status) {
+						return
+					}
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+		}()
+		code, out, errs := h.cli(append(args, "--", "agent")...)
+		var term api.Termination
+		if json.Unmarshal([]byte(out), &term); code != tc.wantExit || term.Code != tc.wantCode {
+			t.Fatalf("exit %d, want %d: %s%s", code, tc.wantExit, out, errs)
+		}
+	}
+}
+
+func TestCLIUsageErrors(t *testing.T) {
+	h := harness{t: t, socket: "/nonexistent/subactl.sock"}
+	for _, args := range [][]string{
+		{}, {"frobnicate"}, {"get"}, {"run", "--memory", "lots", "--", "x"}, {"run", "--memory", "1G"},
+		{"run", "-it", "--", "x"}, {"top"}, {"suggest", "worker"},
+	} {
+		if code, _, errs := h.cli(args...); code != 2 || errs == "" {
+			t.Errorf("subactl %v: exit %d, stderr %q; want exit 2 with a message", args, code, errs)
+		}
+	}
+	// A daemon that is not there is a plain failure, not a usage error.
+	if code, _, errs := h.cli("host"); code == 0 || !strings.Contains(errs, "subactld") {
+		t.Errorf("host without a daemon: exit %d, stderr %q", code, errs)
+	}
+}
+
+// The HTTP layer refuses whole requests it does not understand.
+func TestStrictHTTP(t *testing.T) {
+	socket, f := daemonOnSocket(t)
+	hc := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return net.Dial("unix", socket)
+	}}}
+	do := func(method, path, body string) (int, api.Error) {
+		t.Helper()
+		req, _ := http.NewRequest(method, "http://subactld"+path, strings.NewReader(body))
+		resp, err := hc.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var e api.Error
+		json.NewDecoder(resp.Body).Decode(&e)
+		return resp.StatusCode, e
+	}
+	uid := ""
+	if os.Getuid() == 0 {
+		uid = `,"uid":1000`
+	}
+	for _, tc := range []struct {
+		method, path, body string
+		status             int
+		code, field        string
+	}{
+		{"POST", "/v1/leases", `{"envelope":{"memory":1024,"memroy_self":1}` + uid + `}`, 400, api.ErrInvalidArgument, "memroy_self"},
+		{"POST", "/v1/leases", `{"envelope":{"memory":"8G"}` + uid + `}`, 400, api.ErrInvalidArgument, "envelope.memory"},
+		{"POST", "/v1/leases", ``, 400, api.ErrInvalidArgument, ""},
+		{"POST", "/v1/leases", `{"envelope":{"memory":1024}` + uid + `} trailing`, 400, api.ErrInvalidArgument, ""},
+		{"GET", "/v1/leases/ls_nope", ``, 404, api.ErrNotFound, ""},
+		{"GET", "/v1/events", ``, 501, api.ErrNotImplemented, ""},
+		{"POST", "/v1/leases/ls_nope/notify", `{}`, 501, api.ErrNotImplemented, ""},
+	} {
+		status, e := do(tc.method, tc.path, tc.body)
+		if status != tc.status || e.Code != tc.code || e.Field != tc.field || e.Message == "" {
+			t.Errorf("%s %s %s: got %d %+v", tc.method, tc.path, tc.body, status, e)
+		}
+	}
+	if refs, _ := f.List(context.Background()); len(refs) != 0 {
+		t.Fatal(fmt.Sprint("refused requests had side effects: ", refs))
+	}
+}
