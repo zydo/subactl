@@ -17,7 +17,8 @@ type Sample struct {
 	WS       int64   `json:"ws"`        // working set of the whole chamber, bytes
 	AgentsWS int64   `json:"agents_ws"` // working set of the agent tree only
 	Pids     int64   `json:"pids"`
-	OOMKills int64   `json:"oom_kills"` // cumulative
+	OOMKills int64   `json:"oom_kills"` // processes killed for memory anywhere in the chamber, cumulative
+	CapHits  int64   `json:"cap_hits"`  // times the chamber's own cap was hit, cumulative
 }
 
 // Summary holds the metrics of one run, named as in the design.
@@ -28,7 +29,8 @@ type Summary struct {
 	ChamberBytes  int64   `json:"chamber_bytes"`
 	MemBasis      string  `json:"mem_basis"`
 	HostPeakWS    float64 `json:"host_peak_ws"`    // GiB
-	HostOOM       int64   `json:"host_oom"`        // OOM kills in the chamber
+	HostOOM       int64   `json:"host_oom"`        // times the chamber's own cap was hit: the stand-in for a host OOM
+	OOMKills      int64   `json:"oom_kills"`       // processes killed for memory anywhere in the chamber, leases' own limits included
 	Meltdown      bool    `json:"meltdown"`        // the chamber stopped responding and was killed
 	OrphansAfter  int     `json:"orphans_after"`   // processes left 60s after the end
 	LeakedWSAfter float64 `json:"leaked_ws_after"` // GiB held by those processes
@@ -55,9 +57,8 @@ func Summarize(s *Summary, series []Sample) {
 			s.HostPeakWS = g
 		}
 		sum += float64(x.AgentsWS)
-		if x.OOMKills > s.HostOOM {
-			s.HostOOM = x.OOMKills
-		}
+		s.HostOOM = max(s.HostOOM, x.CapHits)
+		s.OOMKills = max(s.OOMKills, x.OOMKills)
 	}
 	if len(series) > 0 && s.ChamberBytes > 0 {
 		s.UtilMean = sum / float64(len(series)) / float64(s.ChamberBytes)

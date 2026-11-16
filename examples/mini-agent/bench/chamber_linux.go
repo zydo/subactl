@@ -153,6 +153,9 @@ func (c *chamber) sample(t time.Duration, agents string) Sample {
 		AgentsWS: workingSet(filepath.Join(c.dir, agents)),
 		Pids:     readInt(filepath.Join(c.dir, "pids.current")),
 		OOMKills: stat(filepath.Join(c.dir, "memory.events"), "oom_kill"),
+		// The local file counts only what this cgroup's own limit caused:
+		// a lease killed at its own limit inside the chamber is not a hit.
+		CapHits: stat(filepath.Join(c.dir, "memory.events.local"), "oom"),
 	}
 }
 

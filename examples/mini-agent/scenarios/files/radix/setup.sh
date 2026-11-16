@@ -3,6 +3,11 @@
 set -eu
 . "$TASK_DIR/env.sh"
 mkdir -p "$(dirname "$WT")"
+# A package that is dispatched again starts from a clean worktree.
+if [ -e "$WT" ]; then
+  git -C "$REPO" worktree remove --force "$WT" >/dev/null 2>&1 || rm -rf "$WT"
+  git -C "$REPO" worktree prune
+fi
 git -C "$REPO" worktree add -f --detach "$WT" "$BASE" >/dev/null 2>&1
 cd "$WT"
 # Move the repository to React 19: dependencies, lockfile, Storybook config.
