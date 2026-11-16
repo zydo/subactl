@@ -33,6 +33,7 @@ type fakeGroup struct {
 	extra    int   // descendant processes besides main
 	stuck    int   // processes that survive KillTree
 	mem      int64 // own usage, children excluded
+	ooms     int64 // times its own limit was hit
 	peak     int64
 	children map[api.LeaseID]bool
 }
@@ -156,7 +157,7 @@ func (f *Fake) Sample(_ context.Context, g ACGroup) (api.Usage, error) {
 	if mem > fg.peak {
 		fg.peak = mem
 	}
-	return api.Usage{Memory: mem, MemoryPeak: fg.peak, MemBasis: f.MemBasis(), Pids: pids, SampledAt: time.Now()}, nil
+	return api.Usage{Memory: mem, MemoryPeak: fg.peak, MemBasis: f.MemBasis(), Pids: pids, OOMEvents: fg.ooms, SampledAt: time.Now()}, nil
 }
 
 func (f *Fake) SetLimits(_ context.Context, g ACGroup, env api.Envelope) error {
@@ -358,4 +359,16 @@ func (f *Fake) ExitIfAlive(lease api.LeaseID, st ExitStatus) bool {
 	}
 	g.main.exitLocked(st)
 	return true
+}
+
+// OOM simulates the lease hitting its own memory limit: the kernel kills
+// the whole acgroup, nested acgroups included, and records the event on
+// the lease whose limit it was.
+func (f *Fake) OOM(lease api.LeaseID) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g := f.must(lease)
+	g.ooms++
+	var rep KillReport
+	f.killLocked(g, &rep)
 }

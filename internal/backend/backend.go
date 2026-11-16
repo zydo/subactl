@@ -36,6 +36,29 @@ type Cmd struct {
 	TTY  bool
 }
 
+// HolderWatcher is implemented by backends that can tell exactly when a
+// process outside any acgroup dies. The daemon uses it to reap a lead when
+// its holder, the "subactl run" process, goes away.
+type HolderWatcher interface {
+	// WatchHolder returns a channel that is closed when pid exits. The
+	// watch ends, without closing the channel, when ctx is cancelled.
+	WatchHolder(ctx context.Context, pid int) (<-chan struct{}, error)
+}
+
+// Escape is a process found outside every acgroup that still carries a
+// lease's marker in its environment.
+type Escape struct {
+	Pid   int
+	Lease api.LeaseID
+}
+
+// EscapeScanner is implemented by backends that can look for such
+// processes. It is a heuristic for accidental leaks, not a security
+// boundary: clearing the environment defeats it.
+type EscapeScanner interface {
+	ScanEscapes(ctx context.Context) ([]Escape, error)
+}
+
 // ExitStatus is how a main process ended. Signal is zero for a normal exit.
 type ExitStatus struct {
 	Code   int

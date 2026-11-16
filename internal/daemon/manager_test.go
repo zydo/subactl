@@ -539,3 +539,79 @@ func TestExactlyOneTerminationUnderRaces(t *testing.T) {
 		t.Fatalf("allocated %d", h.Allocated)
 	}
 }
+
+// F4 and F14: a lease that hits its own memory limit ends with 413; a
+// nested lease that dies because its parent hit the limit ends with 502;
+// leases outside are untouched.
+func TestOOMAttribution(t *testing.T) {
+	m, f := newManager(t)
+	lead := start(t, m, operator, "", 16*gib)
+	a := start(t, m, node(lead), "", 4*gib)
+	aa := start(t, m, node(a), "", gib)
+	b := start(t, m, node(lead), "", 4*gib)
+
+	f.OOM(a) // a's limit: the kernel kills a and aa together
+	if term := wait(t, m, a); term.Code != api.CodeOOMLeaseLimit || term.Dimension != "memory" || term.Limit != 4*gib {
+		t.Fatalf("a: %+v", term)
+	}
+	if term := wait(t, m, aa); term.Code != api.CodeParentDied {
+		t.Fatalf("aa: %+v", term)
+	}
+	for _, id := range []api.LeaseID{lead, b} {
+		if ls, _ := m.Get(ctx, operator, id); ls.State != api.StateRunning {
+			t.Fatalf("%s was affected: %+v", id, ls)
+		}
+	}
+	// The nested lease hitting its own limit ends alone.
+	c := start(t, m, node(b), "", gib)
+	f.OOM(c)
+	if term := wait(t, m, c); term.Code != api.CodeOOMLeaseLimit {
+		t.Fatalf("c: %+v", term)
+	}
+	if ls, _ := m.Get(ctx, operator, b); ls.State != api.StateRunning {
+		t.Fatalf("b died with its child: %+v", ls)
+	}
+}
+
+// watching wraps the fake backend with a holder watch the test controls.
+type watching struct {
+	*backend.Fake
+	gone chan struct{}
+	err  error
+}
+
+func (w *watching) WatchHolder(context.Context, int) (<-chan struct{}, error) { return w.gone, w.err }
+
+// F1 and F15 at the manager level: when the process that started a lead
+// dies, the whole tree is reaped with 502.
+func TestHolderDeathReapsLead(t *testing.T) {
+	w := &watching{Fake: backend.NewFake(), gone: make(chan struct{})}
+	m, err := NewManager(ctx, Config{Backend: w, Capacity: 32 * gib})
+	if err != nil {
+		t.Fatal(err)
+	}
+	holder := Caller{UID: 501, PID: 4242}
+	lead := start(t, m, holder, "", 8*gib)
+	kid := start(t, m, node(lead), "", gib)
+	w.AddProcs(kid, 3)
+
+	close(w.gone) // the terminal is closed; "subactl run" dies
+	term := wait(t, m, lead)
+	if term.Code != api.CodeParentDied || term.Evidence["holder_pid"] != 4242 {
+		t.Fatalf("lead: %+v", term)
+	}
+	if kt := wait(t, m, kid); kt.Code != api.CodeParentDied {
+		t.Fatalf("kid: %+v", kt)
+	}
+	if refs, _ := w.List(ctx); len(refs) != 0 {
+		t.Fatalf("acgroups left: %v", refs)
+	}
+	// A holder that is already gone cannot be given a lead.
+	w.err = errors.New("no such process")
+	_, err = m.Acquire(ctx, holder, api.AcquireRequest{Envelope: api.Envelope{Memory: gib}})
+	wantStatus(t, err, http.StatusConflict, api.ErrConflict, "")
+	time.Sleep(20 * time.Millisecond)
+	if h := m.Host(); h.Allocated != 0 {
+		t.Fatalf("a lead without a holder kept %d bytes", h.Allocated)
+	}
+}

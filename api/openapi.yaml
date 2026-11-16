@@ -477,6 +477,9 @@ components:
           type: number
         pids:
           type: integer
+        oom_events:
+          type: integer
+          description: Times this acgroup's own memory limit was hit. Ancestors' limits do not count.
         sampled_at:
           type: string
           format: date-time

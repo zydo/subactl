@@ -30,7 +30,9 @@ type Config struct {
 	DefaultGrace time.Duration
 	// TermWait is how long terminate waits after SIGTERM (default 10s).
 	TermWait time.Duration
-	Log      *slog.Logger
+	// EscapeScan is how often escaped processes are looked for (default 5s).
+	EscapeScan time.Duration
+	Log        *slog.Logger
 }
 
 // Caller is who is making a request. A caller inside an acgroup is that
@@ -39,6 +41,9 @@ type Caller struct {
 	Lease api.LeaseID // empty for an operator
 	UID   int
 	Admin bool
+	// PID is the calling process. An operator that creates a lead becomes
+	// its holder: when that process dies, the lead is reaped.
+	PID int
 }
 
 // Error is an API error with its HTTP status.
@@ -92,6 +97,9 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 	if cfg.TermWait == 0 {
 		cfg.TermWait = 10 * time.Second
 	}
+	if cfg.EscapeScan == 0 {
+		cfg.EscapeScan = 5 * time.Second
+	}
 	if cfg.Log == nil {
 		cfg.Log = slog.New(slog.DiscardHandler)
 	}
@@ -102,7 +110,36 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 	if err := m.failClosed(ctx); err != nil {
 		return nil, err
 	}
+	if sc, ok := m.be.(backend.EscapeScanner); ok {
+		go m.escapeLoop(ctx, sc)
+	}
 	return m, nil
+}
+
+// escapeLoop looks every few seconds for processes that left their acgroup
+// but still carry its marker. Each is killed, and the lease it came from
+// ends with 451. The loop stops when ctx is cancelled.
+func (m *Manager) escapeLoop(ctx context.Context, sc backend.EscapeScanner) {
+	tick := time.NewTicker(m.cfg.EscapeScan)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+		found, err := sc.ScanEscapes(ctx)
+		if err != nil {
+			m.log.Warn("escape scan failed", "err", err)
+			continue
+		}
+		for _, e := range found {
+			_ = syscall.Kill(e.Pid, syscall.SIGKILL)
+			m.log.Warn("escaped process killed", "pid", e.Pid, "lease", e.Lease)
+			// The lease may be long gone; then the kill is all there is to do.
+			m.reap(e.Lease, api.CodeEscapeDetected, map[string]any{"escaped_pid": e.Pid})
+		}
+	}
 }
 
 func (m *Manager) failClosed(ctx context.Context) error {
@@ -286,11 +323,44 @@ func (m *Manager) Acquire(ctx context.Context, c Caller, req api.AcquireRequest)
 		m.led.Abort(ls.ID)
 		return api.Lease{}, apiErr(http.StatusInternalServerError, api.ErrInternal, "create acgroup: %v", err)
 	}
+	rt := &runtime{group: g, done: make(chan struct{})}
 	m.mu.Lock()
-	m.rt[ls.ID] = &runtime{group: g, done: make(chan struct{})}
+	m.rt[ls.ID] = rt
 	m.mu.Unlock()
+	if ls.Parent == "" {
+		if err := m.watchHolder(ls.ID, rt, c.PID); err != nil {
+			go m.reap(ls.ID, api.CodeParentDied, map[string]any{"cause": "the holder exited before the lead was created", "holder_pid": c.PID})
+			return api.Lease{}, apiErr(http.StatusConflict, api.ErrConflict, "the process that asked for the lead has already exited: %v", err)
+		}
+	}
 	m.log.Info("lease admitted", "lease", ls.ID, "parent", ls.Parent, "kind", ls.Kind, "memory", ls.Envelope.Memory)
 	return ls, nil
+}
+
+// watchHolder ties a lead to the operator process that created it. A
+// nested lease needs no watch: its holder is its parent's main process,
+// whose exit already reaps the subtree. Backends that cannot watch a
+// process exactly do not get a weaker substitute.
+func (m *Manager) watchHolder(id api.LeaseID, rt *runtime, pid int) error {
+	hw, ok := m.be.(backend.HolderWatcher)
+	if !ok || pid <= 0 {
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	gone, err := hw.WatchHolder(ctx, pid)
+	if err != nil {
+		cancel()
+		return err
+	}
+	go func() {
+		defer cancel()
+		select {
+		case <-gone:
+			m.reap(id, api.CodeParentDied, map[string]any{"cause": "the holder process exited", "holder_pid": pid})
+		case <-rt.done:
+		}
+	}()
+	return nil
 }
 
 func ledgerErr(err error) error {
@@ -345,7 +415,35 @@ func (m *Manager) onMainExit(id api.LeaseID, wait func() backend.ExitStatus) {
 		code, ev["step"] = rt.pending, rt.step
 	}
 	m.mu.Unlock()
+	// A memory limit is a fact that outranks every other reading of the
+	// exit. The limit that was hit may be an ancestor's: then that ancestor
+	// ends with 413 and this lease is reaped with it, as 502.
+	if st.Signal != 0 {
+		if hit, n := m.oomLimitHit(id); hit != "" {
+			m.reap(hit, api.CodeOOMLeaseLimit, map[string]any{"oom_events": n})
+		}
+	}
 	m.reap(id, code, ev)
+}
+
+// oomLimitHit looks from the lease upwards for the nearest acgroup whose
+// own memory limit was hit.
+func (m *Manager) oomLimitHit(id api.LeaseID) (api.LeaseID, int64) {
+	for id != "" {
+		rt := m.runtime(id)
+		if rt == nil {
+			break
+		}
+		if u, err := m.be.Sample(context.Background(), rt.group); err == nil && u.OOMEvents > 0 {
+			return id, u.OOMEvents
+		}
+		ls, ok := m.led.Get(id)
+		if !ok {
+			break
+		}
+		id = ls.Parent
+	}
+	return "", 0
 }
 
 // reap ends a lease and its whole subtree. It is safe to call from several
@@ -422,6 +520,11 @@ func (m *Manager) record(ls api.Lease, code int, u api.Usage, ev map[string]any)
 		who = ls.Kind + " " + string(ls.ID)
 	}
 	switch code {
+	case api.CodeOOMLeaseLimit:
+		t.Dimension = "memory"
+		t.Message = fmt.Sprintf("%s exceeded its memory hard limit of %s and was killed as a whole.", who, api.FormatBytes(ls.Envelope.Memory))
+	case api.CodeEscapeDetected:
+		t.Message = who + " had a process outside its acgroup; the process was killed and the lease ended."
 	case api.CodeCompleted:
 		t.Message = who + " completed: its main process exited with status 0."
 	case api.CodeReleased:

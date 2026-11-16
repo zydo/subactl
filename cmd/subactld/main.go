@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -11,22 +10,37 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/zydo/subactl/api"
 	"github.com/zydo/subactl/client"
 	"github.com/zydo/subactl/internal/backend"
+	"github.com/zydo/subactl/internal/backend/cgroup2"
 	"github.com/zydo/subactl/internal/daemon"
 	"github.com/zydo/subactl/internal/hostmem"
 )
 
 func main() {
+	// Re-executed inside a lease's cgroup, subactld is the pre-exec shim.
+	if len(os.Args) > 1 && os.Args[1] == cgroup2.ShimArg {
+		fmt.Fprintln(os.Stderr, "subactld:", cgroup2.ShimMain(os.Args[2:]))
+		os.Exit(126)
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "subactld:", err)
 		os.Exit(1)
 	}
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }
 
 func run() error {
@@ -34,6 +48,9 @@ func run() error {
 	backendName := flag.String("backend", "cgroup2", "enforcement backend: cgroup2 or fake")
 	capacityFlag := flag.String("capacity", "", "cap on the effective capacity, e.g. 24G (default: total memory minus the reserve)")
 	reserveFlag := flag.String("reserve", "", "memory kept for the system, e.g. 8G (default: the larger of 15% and 8G)")
+	cgroupBase := flag.String("cgroup", "/sys/fs/cgroup/subactl", "cgroup under which every lease lives (cgroup2 backend)")
+	socketGroup := flag.String("socket-group", "subactl", "group that may connect to the socket")
+	stateDir := flag.String("state", envOr("SUBACTL_STATE", "/var/lib/subactl"), "state directory: scratch directories and, later, the audit log")
 	flag.Parse()
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
@@ -43,7 +60,14 @@ func run() error {
 		be = backend.NewFake()
 		log.Warn("the fake backend starts no processes and enforces nothing; it is for development only")
 	case "cgroup2":
-		return errors.New("the cgroup2 backend lands in milestone M2; for development use --backend fake")
+		self, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		be, err = cgroup2.New(cgroup2.Config{Base: *cgroupBase, StateDir: *stateDir, Socket: *socket, Shim: self})
+		if err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unknown backend %q: want cgroup2 or fake", *backendName)
 	}
@@ -89,7 +113,16 @@ func run() error {
 		return err
 	}
 	defer os.Remove(*socket)
-	// TODO(M4): chgrp the socket to the subactl group.
+	// The socket is for root and one group. Agents and operators must be
+	// in that group to reach the daemon at all.
+	if g, err := user.LookupGroup(*socketGroup); err == nil {
+		gid, _ := strconv.Atoi(g.Gid)
+		if err := os.Chown(*socket, -1, gid); err != nil {
+			return err
+		}
+	} else if os.Geteuid() == 0 {
+		log.Warn("the socket group does not exist; only root can reach the daemon", "group", *socketGroup)
+	}
 	if err := os.Chmod(*socket, 0o660); err != nil {
 		return err
 	}

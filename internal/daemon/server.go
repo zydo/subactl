@@ -121,9 +121,9 @@ func (s *Server) peerIdentity(r *http.Request) (Caller, error) {
 	ref, err := s.m.be.Identify(r.Context(), p.pid)
 	switch {
 	case err == nil:
-		return Caller{Lease: ref.Lease, UID: p.uid}, nil
+		return Caller{Lease: ref.Lease, UID: p.uid, PID: p.pid}, nil
 	case errors.Is(err, backend.ErrNotMember):
-		return Caller{UID: p.uid, Admin: p.uid == 0}, nil
+		return Caller{UID: p.uid, Admin: p.uid == 0, PID: p.pid}, nil
 	}
 	return Caller{}, err
 }

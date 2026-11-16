@@ -146,12 +146,15 @@ type AcquireRequest struct {
 
 // Usage is a measured sample of one acgroup, nested acgroups included.
 type Usage struct {
-	Memory     int64     `json:"memory"`
-	MemoryPeak int64     `json:"memory_peak"`
-	MemBasis   MemBasis  `json:"mem_basis"`
-	CPUSeconds float64   `json:"cpu_seconds"`
-	Pids       int64     `json:"pids"`
-	SampledAt  time.Time `json:"sampled_at"`
+	Memory     int64    `json:"memory"`
+	MemoryPeak int64    `json:"memory_peak"`
+	MemBasis   MemBasis `json:"mem_basis"`
+	CPUSeconds float64  `json:"cpu_seconds"`
+	Pids       int64    `json:"pids"`
+	// OOMEvents counts how often this acgroup's own memory limit was hit
+	// and an allocation was about to fail. Limits of ancestors do not count.
+	OOMEvents int64     `json:"oom_events"`
+	SampledAt time.Time `json:"sampled_at"`
 }
 
 // Lease is one node of an agent tree.
