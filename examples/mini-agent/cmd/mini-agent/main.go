@@ -201,8 +201,9 @@ func run() int {
 	err = a.Run(ctx, "Carry out the task: "+label)
 	switch {
 	case errors.Is(err, llm.ErrQuota):
+		// An abort is not a verdict on the task: no result is written, so
+		// the planner sees the task as lost and dispatches it again.
 		printer.Line("giving up: " + err.Error())
-		_ = reg.WriteResult(agent.Result{Task: workName, Status: "failed", Detail: "usage_limit"})
 		return exitQuota
 	case errors.Is(err, context.Canceled):
 		return 130

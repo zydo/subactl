@@ -198,6 +198,11 @@ func (c *chamber) destroy() error {
 	return last
 }
 
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 func cmdline(pid int) string {
 	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
 	if err != nil {
@@ -230,11 +235,7 @@ func Run(o Options) (*Summary, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if err := ch.destroy(); err != nil {
-			o.Log("chamber %s was not fully removed: %v", ch.dir, err)
-		}
-	}()
+	defer ch.destroy() // on early returns; a second call is harmless
 	series, err := NewSeriesWriter(filepath.Join(o.OutDir, "series.jsonl"))
 	if err != nil {
 		return nil, err
@@ -387,6 +388,20 @@ func Run(o Options) (*Summary, error) {
 	for _, l := range logs {
 		data, _ := os.ReadFile(l)
 		sum.WorkLost += strings.Count(string(data), "usage limit: killed subagent")
+	}
+
+	// The task may have things to clean up outside the run directory. Its
+	// processes must be gone first, or they keep writing there.
+	if err := ch.destroy(); err != nil {
+		o.Log("chamber %s was not fully removed: %v", ch.dir, err)
+	}
+	if teardown := filepath.Join(runDir, "task", "teardown.sh"); fileExists(teardown) {
+		td := exec.Command(teardown)
+		td.Env = append(list.Env, "RUN_ID="+name)
+		td.SysProcAttr = &syscall.SysProcAttr{Credential: cred}
+		if out, err := td.CombinedOutput(); err != nil {
+			o.Log("teardown failed: %v: %s", err, strings.TrimSpace(string(out)))
+		}
 	}
 
 	data, _ := json.MarshalIndent(sum, "", "  ")

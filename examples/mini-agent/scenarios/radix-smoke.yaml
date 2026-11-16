@@ -3,7 +3,7 @@
 seed: 1
 task: radix
 fanout: 3
-depth: 2
+depth: 3
 max_packages: 3
-duration: 4m
+duration: 3m
 fanout_at: 5s

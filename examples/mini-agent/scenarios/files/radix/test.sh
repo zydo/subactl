@@ -19,7 +19,7 @@ else
   echo "no jest tests for $PKG"
 fi
 keep=0; [ "${G2_LEAVE_SERVERS:-0}" = 1 ] && keep=1
-if NODE_PATH="$RADIX_HOME/pw/node_modules" node "$TASK_DIR/shot.js" "$(cat "$WORK/port")" "$PKG" "$WORK/shots" "$RADIX_HOME/shots-base" "$keep" > "$WORK/shot.json" 2> "$WORK/shot.err"; then
+if NODE_PATH="$RADIX_HOME/pw/node_modules" node "$TASK_DIR/shot.js" "$(cat "$WT/.preview-port")" "$PKG" "$WORK/shots" "$RADIX_HOME/shots-base" "$keep" > "$WORK/shot.json" 2> "$WORK/shot.err"; then
   cat "$WORK/shot.json"
   grep -q '"errors":0' "$WORK/shot.json" || fail=1
 else

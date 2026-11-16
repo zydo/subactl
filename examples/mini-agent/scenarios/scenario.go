@@ -274,6 +274,7 @@ func (sc *Scenario) TaskEnv(task string, depth int) []string {
 		fmt.Sprint("DEPTH=", depth),
 		fmt.Sprint("SEED=", sc.Seed),
 		fmt.Sprint("FANOUT=", sc.Fanout),
+		fmt.Sprint("DURATION_S=", int(sc.Duration.Seconds())),
 		"FAIL=" + b(sc.Fails(pkg, depth)),
 		"G2_LEAVE_SERVERS=" + b(sc.LeaveServers),
 		"G5_RUNAWAY=" + b(sc.OutputRunaway),

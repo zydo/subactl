@@ -5,8 +5,13 @@ set -eu
 mkdir -p "$(dirname "$WT")"
 git -C "$REPO" worktree add -f --detach "$WT" "$BASE" >/dev/null 2>&1
 cd "$WT"
-git checkout -q "$FIX" -- package.json yarn.lock
+# Move the repository to React 19: dependencies, lockfile, Storybook config.
+cp "$RADIX_HOME/r19/package.json" "$RADIX_HOME/r19/yarn.lock" .
+cp "$RADIX_HOME/r19/.storybook/main.ts" .storybook/main.ts
 cp -al "$RADIX_HOME/r19/node_modules" node_modules
+# Build caches must not be shared: hard-linked cache files would be written
+# by every worktree's dev server at once.
+rm -rf node_modules/.cache
 # The first attempt changes only this package. A seeded failure skips even
 # that, as an agent that misreads the task would.
 if [ "${FAIL:-0}" != 1 ]; then

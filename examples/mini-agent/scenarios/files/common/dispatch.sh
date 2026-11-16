@@ -12,6 +12,13 @@ if [ "${G5_RUNAWAY:-0}" = 1 ] && [ ! -f "$RUN_DIR/results/runaway.d1.json" ]; th
 fi
 echo "dispatching ${#todo[@]} workers, at most ${FANOUT} at a time"
 [ "${#todo[@]}" -gt 0 ] || exit 0
-printf '%s\n' "${todo[@]}" | xargs -P "$FANOUT" -I{} "$MINI_AGENT" --task {}
+# Stop waiting when the scenario ends, however long the workers take.
+limit=()
+if command -v timeout >/dev/null; then
+  left=$(( DURATION_S - ( $(date +%s) - MINI_AGENT_T0 / 1000000000 ) ))
+  [ "$left" -gt 1 ] || { echo "no time left"; exit 0; }
+  limit=(timeout "$left")
+fi
+printf '%s\n' "${todo[@]}" | "${limit[@]}" xargs -P "$FANOUT" -I{} "$MINI_AGENT" --task {}
 echo "dispatch finished with status $?"
 ls "$RUN_DIR/results" | wc -l

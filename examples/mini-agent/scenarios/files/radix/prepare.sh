@@ -12,6 +12,12 @@ cd primitives && git checkout -q --detach "$BASE"
 [ -d ../r19 ] || git worktree add -f --detach ../r19 "$FIX"
 cd ../r19 && git checkout -q --detach "$FIX"
 [ -d node_modules ] || yarn install --immutable
+# Upstream #2934 made the code compatible but left the dependencies on
+# React 18. Raise the runtime to 19. The types stay on 18: the reference
+# fix predates the final React 19 types and does not compile against them.
+yarn up 'react@^19.0.0' 'react-dom@^19.0.0' '@types/react@^18.3.0' '@types/react-dom@^18.3.0'
+# Storybook 7 picks its React root API by version and only knows 18.
+grep -q react-dom-shim .storybook/main.ts || sed -i 's|        ...convertTsConfigPathsToWebpackAliases(),|&\n        "@storybook/react-dom-shim": require.resolve("@storybook/react-dom-shim/dist/react-18"),|' .storybook/main.ts
 mkdir -p ../pw && cd ../pw
 [ -d node_modules/playwright ] || { npm init -y >/dev/null; npm i playwright@1.44; }
 npx playwright install chromium
