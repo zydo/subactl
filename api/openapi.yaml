@@ -772,6 +772,35 @@ components:
             $ref: '#/components/schemas/Event'
         termination:
           $ref: '#/components/schemas/Termination'
+        spikes:
+          description: Tool calls during which memory grew by at least 64MiB, largest growth first.
+          type: array
+          items:
+            $ref: '#/components/schemas/Spike'
+    Spike:
+      description: The memory growth during one tool call, from its progress beacon to the next.
+      type: object
+      properties:
+        tool:
+          type: string
+        seq:
+          type: integer
+          format: int64
+        from:
+          type: string
+          format: date-time
+        until:
+          type: string
+          format: date-time
+        before:
+          type: integer
+          format: int64
+        peak:
+          type: integer
+          format: int64
+        growth:
+          type: integer
+          format: int64
     Error:
       type: object
       properties:

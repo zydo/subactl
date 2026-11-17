@@ -13,7 +13,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
@@ -1139,4 +1141,179 @@ func uniq(m map[string]int) map[int]bool {
 		out[v] = true
 	}
 	return out
+}
+
+// F28 over the real socket: an operator sees and ends only its own leads,
+// unless it is in the subactl-admin group. The lead belongs to the test's
+// agent user; the other operator is "nobody", acting through this test
+// binary run again as that user (see TestIntegrationF28Client).
+func TestIntegrationF28AdminGroup(t *testing.T) {
+	if os.Getenv("SUBACTL_F28_SOCKET") != "" {
+		t.Skip("this is the client side")
+	}
+	e := newEnv(t)
+	nobody, err := user.Lookup("nobody")
+	if err != nil {
+		t.Skipf("no user nobody: %v", err)
+	}
+	if nobody.Uid == strconv.Itoa(e.uid) {
+		t.Skip("the agent user is nobody")
+	}
+	for _, tool := range []string{"groupadd", "gpasswd"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s is needed: %v", tool, err)
+		}
+	}
+
+	// The daemon's HTTP side on a socket anyone may reach.
+	dir, err := os.MkdirTemp("/tmp", "subactl-f28-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	_ = os.Chmod(dir, 0o755)
+	sock := filepath.Join(dir, "s")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Chmod(sock, 0o666)
+	server := NewServer(e.m, nil)
+	srv := &http.Server{Handler: server, ConnContext: server.ConnContext}
+	go srv.Serve(ln)
+	defer srv.Close()
+	// The client is this test binary, where nobody can run it.
+	self, _ := os.Executable()
+	bin := filepath.Join(dir, "client.test")
+	data, err := os.ReadFile(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin, data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	uid, _ := strconv.Atoi(nobody.Uid)
+	gid, _ := strconv.Atoi(nobody.Gid)
+	asNobody := func(action, id string) (int, string) {
+		cmd := exec.Command(bin, "-test.run=^TestIntegrationF28Client$", "-test.count=1")
+		cmd.Env = []string{"SUBACTL_F28_SOCKET=" + sock, "SUBACTL_F28_ACTION=" + action, "SUBACTL_F28_LEASE=" + id}
+		cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("client as nobody: %v\n%s", err, out)
+		}
+		for _, line := range strings.Split(string(out), "\n") {
+			if rest, ok := strings.CutPrefix(line, "F28 "); ok {
+				status, body, _ := strings.Cut(rest, " ")
+				n, _ := strconv.Atoi(status)
+				return n, body
+			}
+		}
+		t.Fatalf("no answer from the client:\n%s", out)
+		return 0, ""
+	}
+
+	lead := e.run(e.op, 64*mib, "exec sleep 600")
+
+	// Not an admin: the lead is invisible and cannot be ended.
+	if status, body := asNobody("list", ""); status != 200 || strings.Contains(body, string(lead)) {
+		t.Fatalf("an operator of another uid listed the lead: %d %s", status, body)
+	}
+	if status, body := asNobody("kill", string(lead)); status != 403 {
+		t.Fatalf("an operator of another uid ended the lead: %d %s", status, body)
+	}
+
+	// In subactl-admin: it may see and end every lead. The group is the
+	// system's own; it is left as it was found.
+	created := false
+	if _, err := user.LookupGroup(AdminGroup); err != nil {
+		if out, err := exec.Command("groupadd", AdminGroup).CombinedOutput(); err != nil {
+			t.Fatalf("groupadd: %v\n%s", err, out)
+		}
+		created = true
+	}
+	if out, err := exec.Command("gpasswd", "-a", nobody.Username, AdminGroup).CombinedOutput(); err != nil {
+		t.Fatalf("gpasswd: %v\n%s", err, out)
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("gpasswd", "-d", nobody.Username, AdminGroup).Run()
+		if created {
+			_ = exec.Command("groupdel", AdminGroup).Run()
+		}
+	})
+	if status, body := asNobody("list", ""); status != 200 || !strings.Contains(body, string(lead)) {
+		t.Fatalf("an admin did not see the lead: %d %s", status, body)
+	}
+	if status, body := asNobody("kill", string(lead)); status != 200 {
+		t.Fatalf("an admin could not end the lead: %d %s", status, body)
+	}
+	if term := e.wait(lead, 5*time.Second); term.Code != api.CodeKilled {
+		t.Fatalf("the lead ended with %d %s", term.Code, term.Name)
+	}
+}
+
+// The client side of TestIntegrationF28AdminGroup: one request over the
+// socket, as whoever runs it, answered on a line "F28 <status> <body>".
+func TestIntegrationF28Client(t *testing.T) {
+	sock := os.Getenv("SUBACTL_F28_SOCKET")
+	if sock == "" {
+		t.Skip("run by TestIntegrationF28AdminGroup")
+	}
+	hc := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", sock)
+	}}}
+	var res *http.Response
+	var err error
+	switch os.Getenv("SUBACTL_F28_ACTION") {
+	case "list":
+		res, err = hc.Get("http://subactld/v1/leases")
+	case "kill":
+		res, err = hc.Post("http://subactld/v1/leases/"+os.Getenv("SUBACTL_F28_LEASE")+"/kill", "application/json", strings.NewReader("{}"))
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	fmt.Printf("F28 %d %s\n", res.StatusCode, strings.ReplaceAll(string(body), "\n", " "))
+}
+
+// F31 on a real kernel: memory allocated during one tool call is put down
+// to that call's beacon in the lease's trace, and not to the calls before
+// or after it.
+func TestIntegrationF31SpikeToToolCall(t *testing.T) {
+	e := newEnv(t)
+	id := e.run(e.op, 1<<30, `while [ ! -f $SUBACTL_SCRATCH/go ]; do sleep 0.1; done
+exec awk 'BEGIN { s = "x"; while (length(s) < 200000000) s = s s; system("sleep 600") }'`)
+	beacon := func(tool string, seq int64) {
+		if err := e.m.Progress(node(id), api.Self, api.ProgressRequest{State: "working", Tool: tool, Seq: seq}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	beacon("read", 1)
+	time.Sleep(2500 * time.Millisecond)
+	beacon("bash", 2)
+	if err := os.WriteFile(filepath.Join(e.be.ScratchDir(id), "go"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(4 * time.Second)
+	beacon("edit", 3)
+	time.Sleep(2500 * time.Millisecond)
+	tr, err := e.m.Trace(e.op, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tr.Spikes) == 0 {
+		t.Fatalf("no spike found; %d samples", len(tr.Samples))
+	}
+	s := tr.Spikes[0]
+	t.Logf("spike: %s #%d grew %d MiB (%d -> %d)", s.Tool, s.Seq, s.Growth>>20, s.Before>>20, s.Peak>>20)
+	if s.Tool != "bash" || s.Seq != 2 || s.Growth < 200<<20 {
+		t.Fatalf("the growth was put down to %+v", s)
+	}
+	for _, other := range tr.Spikes[1:] {
+		if other.Tool == "read" {
+			t.Fatalf("growth put down to the call before: %+v", other)
+		}
+	}
 }

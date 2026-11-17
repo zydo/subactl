@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -430,9 +431,74 @@ func (m *Manager) Trace(c Caller, id api.LeaseID) (api.Trace, error) {
 				return api.Trace{}, err
 			}
 		}
+		tr.Spikes = spikes(tr.Samples, tr.Events)
 		return tr, nil
 	}
-	return m.traceFromAudit(c, id)
+	tr, err := m.traceFromAudit(c, id)
+	if err == nil {
+		tr.Spikes = spikes(tr.Samples, tr.Events)
+	}
+	return tr, err
+}
+
+// spikes attributes memory growth to tool calls. Each progress beacon that
+// names a tool opens an interval that the next beacon closes; the growth
+// of an interval is its highest sample minus the memory when it opened.
+// Intervals that grew by at least api.SpikeMin are returned, largest
+// first. Samples come once a second, so a call shorter than that may have
+// its growth seen in the next interval.
+func spikes(samples []api.Usage, events []api.Event) []api.Spike {
+	type beacon struct {
+		at   time.Time
+		tool string
+		seq  int64
+	}
+	var beacons []beacon
+	for _, e := range events {
+		if e.Type != eventBeacon {
+			continue
+		}
+		b := beacon{at: e.At}
+		b.tool, _ = e.Data["tool"].(string)
+		switch v := e.Data["seq"].(type) {
+		case int64:
+			b.seq = v
+		case float64: // read back from JSON
+			b.seq = int64(v)
+		}
+		beacons = append(beacons, b)
+	}
+	sort.SliceStable(beacons, func(i, j int) bool { return beacons[i].at.Before(beacons[j].at) })
+	var out []api.Spike
+	for i, b := range beacons {
+		if b.tool == "" {
+			continue // a beacon of state alone opens no tool call
+		}
+		var until time.Time
+		if i+1 < len(beacons) {
+			until = beacons[i+1].at
+		}
+		before, peak, seen := int64(-1), int64(0), false
+		for _, s := range samples {
+			switch {
+			case !s.SampledAt.After(b.at):
+				before = s.Memory // the last sample before the call
+			case until.IsZero() || !s.SampledAt.After(until):
+				peak, seen = max(peak, s.Memory), true
+			}
+		}
+		if !seen {
+			continue
+		}
+		if before < 0 {
+			before = 0
+		}
+		if g := peak - before; g >= api.SpikeMin {
+			out = append(out, api.Spike{Tool: b.tool, Seq: b.seq, From: b.at, Until: until, Before: before, Peak: peak, Growth: g})
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Growth > out[j].Growth })
+	return out
 }
 
 func (m *Manager) auditRecords(id api.LeaseID) []audit.Record {

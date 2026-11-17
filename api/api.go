@@ -404,7 +404,26 @@ type Trace struct {
 	Samples     []Usage      `json:"samples"`
 	Events      []Event      `json:"events"`
 	Termination *Termination `json:"termination,omitempty"`
+	// Spikes are the tool calls during which memory grew by at least
+	// SpikeMin, largest growth first: what the timeline says about where
+	// a jump in memory came from.
+	Spikes []Spike `json:"spikes,omitempty"`
 }
+
+// Spike is the memory growth during one tool call: from its progress
+// beacon to the next one.
+type Spike struct {
+	Tool   string    `json:"tool"`
+	Seq    int64     `json:"seq"`
+	From   time.Time `json:"from"`
+	Until  time.Time `json:"until,omitzero"` // zero when no beacon followed
+	Before int64     `json:"before"`         // memory when the call began, bytes
+	Peak   int64     `json:"peak"`           // highest memory during the call, bytes
+	Growth int64     `json:"growth"`         // Peak - Before
+}
+
+// SpikeMin is the smallest growth reported as a spike.
+const SpikeMin = 64 << 20
 
 func init() {
 	Schemas["ResizeAsk"] = ResizeAsk{}
@@ -413,4 +432,5 @@ func init() {
 	Schemas["InboxMessage"] = InboxMessage{}
 	Schemas["Event"] = Event{}
 	Schemas["Trace"] = Trace{}
+	Schemas["Spike"] = Spike{}
 }

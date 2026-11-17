@@ -525,3 +525,34 @@ func TestObservabilityFailureDoesNotSlowEnforcement(t *testing.T) {
 		t.Fatal("nothing was counted as dropped")
 	}
 }
+
+// Memory growth is put down to the tool call during which it happened,
+// whether the trace comes from memory (seq as int64) or from the audit
+// log (seq as float64).
+func TestSpikesAttributeGrowthToToolCalls(t *testing.T) {
+	t0 := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	at := func(s int) time.Time { return t0.Add(time.Duration(s) * time.Second) }
+	mem := []int64{100, 110, 105, 108, 400, 420, 430, 300, 300, 310}
+	var samples []api.Usage
+	for i, m := range mem {
+		samples = append(samples, api.Usage{Memory: m << 20, SampledAt: at(i)})
+	}
+	events := []api.Event{
+		{Type: eventBeacon, At: at(0).Add(500 * time.Millisecond), Data: map[string]any{"tool": "read", "seq": int64(1)}},
+		{Type: "NEAR_LIMIT", At: at(4)}, // not a beacon: ignored
+		{Type: eventBeacon, At: at(3).Add(500 * time.Millisecond), Data: map[string]any{"tool": "bash", "seq": float64(2)}},
+		{Type: eventBeacon, At: at(6).Add(500 * time.Millisecond), Data: map[string]any{"state": "awaiting_input"}},
+		{Type: eventBeacon, At: at(7).Add(500 * time.Millisecond), Data: map[string]any{"tool": "edit", "seq": int64(3)}},
+	}
+	got := spikes(samples, events)
+	if len(got) != 1 {
+		t.Fatalf("want one spike, got %+v", got)
+	}
+	s := got[0]
+	if s.Tool != "bash" || s.Seq != 2 || s.Before != 108<<20 || s.Peak != 430<<20 || s.Growth != 322<<20 || !s.Until.Equal(at(6).Add(500*time.Millisecond)) {
+		t.Fatalf("spike %+v", s)
+	}
+	if spikes(samples, nil) != nil || spikes(nil, events) != nil {
+		t.Fatal("spikes without beacons or samples")
+	}
+}

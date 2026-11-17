@@ -13,8 +13,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # F26 runs subactl from each of these shells; with the variable set, a
+      # shell that is missing fails the test instead of being skipped.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh fish
       - run: make lint
       - run: make test
+        env:
+          SUBACTL_REQUIRE_SHELLS: bash zsh fish
       - run: make build
       - run: make integration
   macos:
@@ -24,6 +29,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - run: brew install fish
       # Includes the macOS backend's tests, which start real processes.
       - run: make test
+        env:
+          SUBACTL_REQUIRE_SHELLS: bash zsh fish
       - run: make build

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -399,6 +400,9 @@ func TestShellAgnostic(t *testing.T) {
 	for _, shell := range []string{"bash", "zsh", "fish"} {
 		path, err := exec.LookPath(shell)
 		if err != nil {
+			if slices.Contains(strings.Fields(os.Getenv("SUBACTL_REQUIRE_SHELLS")), shell) {
+				t.Fatalf("%s is required here but not installed", shell)
+			}
 			t.Logf("%s is not installed here; skipped", shell)
 			continue
 		}
