@@ -55,14 +55,21 @@ func prepareRoot() error {
 	if err := os.MkdirAll(leaf, 0o755); err != nil {
 		return err
 	}
-	data, err := os.ReadFile(filepath.Join(cgroupRoot, "cgroup.procs"))
-	if err != nil {
-		return err
+	// A process that is in the middle of exiting cannot be moved and still
+	// counts until it is gone, so this is tried for a few seconds.
+	for attempt := 0; ; attempt++ {
+		data, rerr := os.ReadFile(filepath.Join(cgroupRoot, "cgroup.procs"))
+		if rerr != nil {
+			return rerr
+		}
+		for _, pid := range strings.Fields(string(data)) {
+			_ = write(filepath.Join(leaf, "cgroup.procs"), pid) // a pid may have exited
+		}
+		if err = enable(cgroupRoot); err == nil || !errors.Is(err, syscall.EBUSY) || attempt >= 50 {
+			return err
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	for _, pid := range strings.Fields(string(data)) {
-		_ = write(filepath.Join(leaf, "cgroup.procs"), pid) // a pid may have exited
-	}
-	return enable(cgroupRoot)
 }
 
 func newChamber(base, name string, bytes int64) (*chamber, error) {
