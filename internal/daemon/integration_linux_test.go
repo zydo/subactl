@@ -45,6 +45,17 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// agentPath is the PATH of test agents. SUBACTL_TEST_PATH adds directories
+// in front, for a machine where a tool the tests use (node) is not
+// installed system-wide.
+func agentPath() string {
+	path := "/usr/local/bin:/usr/bin:/bin"
+	if extra := os.Getenv("SUBACTL_TEST_PATH"); extra != "" {
+		path = extra + ":" + path
+	}
+	return "PATH=" + path
+}
+
 // agentUID is the unprivileged user the test agents run as.
 func agentUID(t *testing.T) int {
 	t.Helper()
@@ -175,7 +186,7 @@ func (e *env) run(c Caller, mem int64, script string) api.LeaseID {
 	if err != nil {
 		e.t.Fatalf("acquire: %v", err)
 	}
-	_, err = e.m.Spawn(context.Background(), c, ls.ID, api.SpawnRequest{Argv: []string{"/bin/sh", "-c", script}, Env: []string{"PATH=/usr/local/bin:/usr/bin:/bin"}, Dir: "/"})
+	_, err = e.m.Spawn(context.Background(), c, ls.ID, api.SpawnRequest{Argv: []string{"/bin/sh", "-c", script}, Env: []string{agentPath()}, Dir: "/"})
 	if err != nil {
 		e.t.Fatalf("spawn: %v", err)
 	}
@@ -548,7 +559,7 @@ func (m *Manager) mustRun(t *testing.T, c Caller, envl api.Envelope, script stri
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Spawn(context.Background(), c, ls.ID, api.SpawnRequest{Argv: []string{"/bin/sh", "-c", script}, Env: []string{"PATH=/usr/local/bin:/usr/bin:/bin"}, Dir: "/"}); err != nil {
+	if _, err := m.Spawn(context.Background(), c, ls.ID, api.SpawnRequest{Argv: []string{"/bin/sh", "-c", script}, Env: []string{agentPath()}, Dir: "/"}); err != nil {
 		t.Fatal(err)
 	}
 	return ls.ID
@@ -606,6 +617,9 @@ func hold(n int64) string {
 
 func needNode(t *testing.T) {
 	t.Helper()
+	if extra := os.Getenv("SUBACTL_TEST_PATH"); extra != "" {
+		os.Setenv("PATH", extra+":"+os.Getenv("PATH"))
+	}
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("this test uses node to hold a known amount of memory")
 	}
@@ -720,7 +734,7 @@ func TestIntegrationF8SafetyNet(t *testing.T) {
 	// The external load: a process in the outer cgroup, outside every lease.
 	// The leases use about 200MiB; with 310MiB more, about 130MiB is left.
 	external := exec.Command("/bin/sh", "-c", hold(296*mib))
-	external.Env = []string{"PATH=/usr/local/bin:/usr/bin:/bin", "SUBACTL_SCRATCH=/tmp"}
+	external.Env = []string{agentPath(), "SUBACTL_SCRATCH=/tmp"}
 	leaf, err := os.Open(filepath.Join(e.outer, "external"))
 	if err != nil {
 		t.Fatal(err)
@@ -825,7 +839,7 @@ func TestIntegrationF25LeadTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := `test -t 0 && test -t 1 && echo is-a-tty; id -u; read line; stty size; echo "typed:$line"; cat /proc/self/cgroup`
-	_, err = e.m.Spawn(context.Background(), e.op, ls.ID, api.SpawnRequest{Argv: []string{"/bin/sh", "-c", script}, Env: []string{"PATH=/usr/local/bin:/usr/bin:/bin"}, Dir: "/"})
+	_, err = e.m.Spawn(context.Background(), e.op, ls.ID, api.SpawnRequest{Argv: []string{"/bin/sh", "-c", script}, Env: []string{agentPath()}, Dir: "/"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -932,13 +946,14 @@ func TestIntegrationF27MultiLeadIsolation(t *testing.T) {
 	if n != 40 {
 		t.Fatalf("only %d of 40 tasks completed next to the noisy lead", n)
 	}
-	// The design's bound is 20%. On the machine this was developed on (a
-	// Linux VM with 10 virtual CPUs on a laptop) the rise is about 50%
-	// with equal cpu.weight, against about 280% with no separation at all:
-	// a machine whose every CPU is busy runs each of them slower, which no
-	// weight can give back. The bound is therefore enforced only on request,
-	// and a rise beyond 2x, which would mean the weights do nothing, always
-	// fails.
+	// The design's bound is 20%. It could not be decided on the machines
+	// this was developed on, which are virtual: there the measured rise was
+	// 50% (Docker Desktop, 10 virtual CPUs) and 82% (VirtualBox, 6), but on
+	// the second a task slowed by 143% with no cgroups at all and a CPU
+	// left free, merely because five others were busy. Virtual CPUs that
+	// are not independent make the bound unmeasurable; it needs bare
+	// metal. So the bound is enforced only on request, and a rise beyond
+	// 2x, which would mean the weights do nothing, always fails.
 	rise := float64(contended)/float64(alone) - 1
 	if os.Getenv("SUBACTL_F27_STRICT") != "" && rise > 0.20 {
 		t.Fatalf("p95 rose from %dms to %dms (%.0f%%), more than the 20%% the design allows", alone, contended, 100*rise)
@@ -947,7 +962,7 @@ func TestIntegrationF27MultiLeadIsolation(t *testing.T) {
 		t.Fatalf("p95 rose from %dms to %dms (%.0f%%): the leads are not isolated from each other", alone, contended, 100*rise)
 	}
 	if rise > 0.20 {
-		t.Logf("NOT MET: the design's bound for F27 is 20%%; measured %.0f%%", 100*rise)
+		t.Logf("UNDECIDED: the design's bound for F27 is 20%%; measured %.0f%% (see the comment above on virtual CPUs)", 100*rise)
 	}
 
 	// The control plane is separate too, when the leads have different owners.
