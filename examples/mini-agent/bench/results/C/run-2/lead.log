@@ -1,16 +1,40 @@
+    0s [lead] I'll read the package list first.
+    0s [lead] → bash #1 {"command":"\"$TASK_DIR/list.sh\" | head -n \"${MAX_PACKAGES:-1000}\"","timeout":60}
+    0s [lead] ← bash #1 accessible-icon accordion alert-dialog announce arrow aspect-ratio avatar checkbox collapsible collection compose-refs context context-menu dialog direction dismissable-layer dropdown-menu focus-guard…
+  2m0s [lead] One worker per package, in parallel.
+  2m0s [lead] → bash #2 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
+  5m0s [lead] usage limit: killed subagent upgrade:toggle.d1 (pid 112645)
+  5m0s [lead] usage limit: killed subagent upgrade:toggle-group.d1 (pid 113431)
+  5m0s [lead] usage limit: killed subagent upgrade:use-callback-ref.d1 (pid 117724)
+  5m4s [lead] ← bash #2 dispatching 55 workers, at most 32 at a time { "code": 200, "name": "COMPLETED", "lease": "ls_49a6c731", "kind": "upgrade", "parent": "ls_baa2e073", "mem_basis": "working_set", "peak": 1862565888, "li…
+  5m4s [lead] ! llm: usage limit reached
+ 5m21s [lead] Some workers did not report back. Dispatching those again.
+ 5m21s [lead] → bash #3 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
+ 15m0s [lead] ← bash #3 dispatching 45 workers, at most 32 at a time { "code": 200, "name": "COMPLETED", "lease": "ls_f2445c70", "kind": "upgrade", "parent": "ls_baa2e073", "mem_basis": "working_set", "peak": 1689014272, "li…
+ 15m0s [lead] ⇢ [subactl events about your child agents since the last turn] ls_0061992c TERMINATED ls_074eb8ce TERMINATED ls_0c9b6496 TERMINATED ls_1261aaf6 DONE ls_1261aaf6 TERMINATED ls_14dbed20 TERMINATED ls_14f0…
+ 15m0s [lead] Checking once more for packages without a result.
+ 15m0s [lead] → bash #4 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
+ 15m0s [lead] ← bash #4 dispatching 21 workers, at most 32 at a time no time left
+ 15m0s [lead] ⇢ [subactl events about your child agents since the last turn] ls_029a0c41 DONE ls_029a0c41 TERMINATED ls_037ec33a DONE ls_037ec33a TERMINATED ls_03f279c2 DONE ls_03f279c2 TERMINATED ls_05e51029 TERMINA…
+ 15m0s [lead] Time is up. Collecting results.
+ 15m0s [lead] → bash #5 {"command":"ls \"$RUN_DIR/results\" | wc -l","timeout":60}
+ 15m0s [lead] ← bash #5 69
+ 15m0s [lead] ⇢ [subactl events about your child agents since the last turn] ls_7eb5d78d TERMINATED
+ 15m0s [lead] Done.
+ 15m0s [lead] finished; run directory: /tmp/out/C/run-2/run
 {
   "code": 200,
   "name": "COMPLETED",
-  "lease": "ls_1de985c0",
+  "lease": "ls_baa2e073",
   "kind": "lead",
   "mem_basis": "working_set",
-  "peak": 8016576512,
+  "peak": 8703692800,
   "limit": 9663676416,
   "enforcement": "hard",
   "evidence": {
     "exit_code": 0,
-    "reaped_pids": 27
+    "reaped_pids": 26
   },
-  "message": "lead ls_1de985c0 completed: its main process exited with status 0.",
-  "at": "2026-11-17T01:38:57.445084667Z"
+  "message": "lead ls_baa2e073 completed: its main process exited with status 0.",
+  "at": "2026-11-17T16:05:20.84683991Z"
 }

@@ -1,0 +1,16 @@
+{
+  "code": 200,
+  "name": "COMPLETED",
+  "lease": "ls_1de985c0",
+  "kind": "lead",
+  "mem_basis": "working_set",
+  "peak": 8016576512,
+  "limit": 9663676416,
+  "enforcement": "hard",
+  "evidence": {
+    "exit_code": 0,
+    "reaped_pids": 27
+  },
+  "message": "lead ls_1de985c0 completed: its main process exited with status 0.",
+  "at": "2026-11-17T01:38:57.445084667Z"
+}

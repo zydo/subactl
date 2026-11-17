@@ -1,191 +1,274 @@
-time=2026-11-17T01:56:14.007Z level=INFO msg="subactld listening" socket=/tmp/out/C/run-4/subactl.sock backend=cgroup2 effective_capacity=10.2GiB reserve=1.8GiB
-time=2026-11-17T01:56:14.102Z level=INFO msg="lease admitted" lease=ls_a9656a47 parent="" kind=lead memory=9663676416
-time=2026-11-17T01:58:14.169Z level=INFO msg="lease admitted" lease=ls_69cfb282 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T01:58:14.173Z level=INFO msg="lease admitted" lease=ls_de6d7149 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T01:58:49.765Z level=INFO msg="lease admitted" lease=ls_791ae6c6 parent=ls_de6d7149 kind=fix memory=935431372
-time=2026-11-17T01:58:50.366Z level=INFO msg="lease admitted" lease=ls_35b33cf3 parent=ls_69cfb282 kind=fix memory=935431372
-time=2026-11-17T01:59:04.002Z level=INFO msg="lease admitted" lease=ls_237e01d4 parent=ls_791ae6c6 kind=fix memory=935431372
-time=2026-11-17T01:59:05.267Z level=INFO msg="lease admitted" lease=ls_33c04804 parent=ls_35b33cf3 kind=fix memory=935431372
-time=2026-11-17T01:59:20.760Z level=INFO msg="lease reaped" lease=ls_237e01d4 code=200 name=COMPLETED
-time=2026-11-17T01:59:20.775Z level=INFO msg="lease reaped" lease=ls_791ae6c6 code=200 name=COMPLETED
-time=2026-11-17T01:59:20.869Z level=INFO msg="lease reaped" lease=ls_de6d7149 code=200 name=COMPLETED
-time=2026-11-17T01:59:20.882Z level=INFO msg="lease admitted" lease=ls_a729e8ef parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T01:59:22.557Z level=INFO msg="lease reaped" lease=ls_33c04804 code=200 name=COMPLETED
-time=2026-11-17T01:59:22.581Z level=INFO msg="lease reaped" lease=ls_35b33cf3 code=200 name=COMPLETED
-time=2026-11-17T01:59:22.707Z level=INFO msg="lease reaped" lease=ls_69cfb282 code=200 name=COMPLETED
-time=2026-11-17T01:59:22.725Z level=INFO msg="lease admitted" lease=ls_47060fd1 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T01:59:24.007Z level=INFO msg="lease resized" lease=ls_a729e8ef memory=4904069529 by=on_near_limit
-time=2026-11-17T01:59:28.544Z level=INFO msg="lease reaped" lease=ls_47060fd1 code=413 name=OOM_LEASE_LIMIT
-time=2026-11-17T01:59:28.548Z level=INFO msg="lease reaped" lease=ls_a729e8ef code=413 name=OOM_LEASE_LIMIT
-time=2026-11-17T01:59:28.562Z level=INFO msg="lease admitted" lease=ls_e28b4852 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T01:59:28.565Z level=INFO msg="lease admitted" lease=ls_4d5bf8a7 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:00:03.126Z level=INFO msg="lease admitted" lease=ls_8115fb31 parent=ls_e28b4852 kind=fix memory=935431372
-time=2026-11-17T02:00:06.147Z level=INFO msg="lease reaped" lease=ls_4d5bf8a7 code=200 name=COMPLETED
-time=2026-11-17T02:00:06.159Z level=INFO msg="lease admitted" lease=ls_21bfdf43 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:00:09.590Z level=INFO msg="lease reaped" lease=ls_21bfdf43 code=413 name=OOM_LEASE_LIMIT
-time=2026-11-17T02:00:09.605Z level=INFO msg="lease admitted" lease=ls_80872098 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:00:16.283Z level=INFO msg="lease admitted" lease=ls_de04477a parent=ls_8115fb31 kind=fix memory=935431372
-time=2026-11-17T02:00:34.678Z level=INFO msg="lease reaped" lease=ls_de04477a code=200 name=COMPLETED
-time=2026-11-17T02:00:34.694Z level=INFO msg="lease reaped" lease=ls_8115fb31 code=200 name=COMPLETED
-time=2026-11-17T02:00:34.806Z level=INFO msg="lease reaped" lease=ls_e28b4852 code=200 name=COMPLETED
-time=2026-11-17T02:00:34.817Z level=INFO msg="lease admitted" lease=ls_5c816bc2 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:00:43.276Z level=INFO msg="lease admitted" lease=ls_4b479533 parent=ls_80872098 kind=fix memory=935431372
-time=2026-11-17T02:00:55.916Z level=INFO msg="lease admitted" lease=ls_e7cbe8a9 parent=ls_4b479533 kind=fix memory=935431372
-time=2026-11-17T02:01:12.697Z level=INFO msg="lease admitted" lease=ls_f3468649 parent=ls_5c816bc2 kind=fix memory=935431372
-time=2026-11-17T02:01:14.202Z level=INFO msg="lease reaped" lease=ls_e7cbe8a9 code=502 name=PARENT_DIED
-time=2026-11-17T02:01:14.202Z level=INFO msg="lease reaped" lease=ls_4b479533 code=502 name=PARENT_DIED
-time=2026-11-17T02:01:14.202Z level=INFO msg="lease reaped" lease=ls_80872098 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.209Z level=INFO msg="lease reaped" lease=ls_f3468649 code=502 name=PARENT_DIED
-time=2026-11-17T02:01:14.209Z level=INFO msg="lease reaped" lease=ls_5c816bc2 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.216Z level=INFO msg="lease admitted" lease=ls_1fded1ef parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.222Z level=INFO msg="lease admitted" lease=ls_b63c37ed parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.227Z level=INFO msg="lease reaped" lease=ls_1fded1ef code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.233Z level=INFO msg="lease reaped" lease=ls_b63c37ed code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.239Z level=INFO msg="lease admitted" lease=ls_dc7f6809 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.246Z level=INFO msg="lease admitted" lease=ls_f0ae02d8 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.251Z level=INFO msg="lease reaped" lease=ls_dc7f6809 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.257Z level=INFO msg="lease reaped" lease=ls_f0ae02d8 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.261Z level=INFO msg="lease admitted" lease=ls_a9639753 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.271Z level=INFO msg="lease reaped" lease=ls_a9639753 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.272Z level=INFO msg="lease admitted" lease=ls_2dc17040 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.281Z level=INFO msg="lease reaped" lease=ls_2dc17040 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.284Z level=INFO msg="lease admitted" lease=ls_a37f6161 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.293Z level=INFO msg="lease reaped" lease=ls_a37f6161 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.294Z level=INFO msg="lease admitted" lease=ls_b5ebc89d parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.305Z level=INFO msg="lease reaped" lease=ls_b5ebc89d code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.307Z level=INFO msg="lease admitted" lease=ls_50a2fcde parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.310Z level=INFO msg="lease admitted" lease=ls_85e45fcf parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.320Z level=INFO msg="lease reaped" lease=ls_85e45fcf code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.320Z level=INFO msg="lease reaped" lease=ls_50a2fcde code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.321Z level=INFO msg="lease admitted" lease=ls_3cd05700 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.331Z level=INFO msg="lease reaped" lease=ls_3cd05700 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.334Z level=INFO msg="lease admitted" lease=ls_1f2eb66b parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.334Z level=INFO msg="lease admitted" lease=ls_f43243f1 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.345Z level=INFO msg="lease reaped" lease=ls_1f2eb66b code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.345Z level=INFO msg="lease reaped" lease=ls_f43243f1 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.345Z level=INFO msg="lease admitted" lease=ls_baeb7bae parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.356Z level=INFO msg="lease reaped" lease=ls_baeb7bae code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.359Z level=INFO msg="lease admitted" lease=ls_67991b21 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.363Z level=INFO msg="lease admitted" lease=ls_6793345d parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.370Z level=INFO msg="lease admitted" lease=ls_e2e83575 parent=ls_a9656a47 kind=runaway memory=268435456
-time=2026-11-17T02:01:14.374Z level=INFO msg="lease reaped" lease=ls_6793345d code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.374Z level=INFO msg="lease reaped" lease=ls_67991b21 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.379Z level=INFO msg="lease reaped" lease=ls_e2e83575 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.425Z level=INFO msg="lease admitted" lease=ls_a943f2f0 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.434Z level=INFO msg="lease admitted" lease=ls_dfd53f78 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.437Z level=INFO msg="lease reaped" lease=ls_a943f2f0 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.442Z level=INFO msg="lease reaped" lease=ls_dfd53f78 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.613Z level=INFO msg="lease admitted" lease=ls_189046c3 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.621Z level=INFO msg="lease reaped" lease=ls_189046c3 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.791Z level=INFO msg="lease admitted" lease=ls_95113869 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.791Z level=INFO msg="lease admitted" lease=ls_7928061a parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:14.803Z level=INFO msg="lease reaped" lease=ls_95113869 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:14.803Z level=INFO msg="lease reaped" lease=ls_7928061a code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:15.000Z level=INFO msg="lease admitted" lease=ls_d741eb8e parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:15.010Z level=INFO msg="lease reaped" lease=ls_d741eb8e code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:15.048Z level=INFO msg="lease admitted" lease=ls_f9165154 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:15.056Z level=INFO msg="lease reaped" lease=ls_f9165154 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:15.101Z level=INFO msg="lease admitted" lease=ls_694f87b1 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:15.111Z level=INFO msg="lease reaped" lease=ls_694f87b1 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:15.113Z level=INFO msg="lease admitted" lease=ls_41d562a7 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:15.116Z level=INFO msg="lease admitted" lease=ls_2d5bb446 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:15.125Z level=INFO msg="lease reaped" lease=ls_41d562a7 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:15.126Z level=INFO msg="lease reaped" lease=ls_2d5bb446 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:15.149Z level=INFO msg="lease admitted" lease=ls_b6201a65 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:15.149Z level=INFO msg="lease admitted" lease=ls_f37691d4 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:15.159Z level=INFO msg="lease reaped" lease=ls_b6201a65 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:15.160Z level=INFO msg="lease reaped" lease=ls_f37691d4 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:15.245Z level=INFO msg="lease admitted" lease=ls_d26ffe1f parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:15.248Z level=INFO msg="lease admitted" lease=ls_dfa3408d parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:15.258Z level=INFO msg="lease reaped" lease=ls_dfa3408d code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:15.258Z level=INFO msg="lease reaped" lease=ls_d26ffe1f code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:15.494Z level=INFO msg="lease admitted" lease=ls_5880af96 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:15.504Z level=INFO msg="lease reaped" lease=ls_5880af96 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:15.892Z level=INFO msg="lease admitted" lease=ls_a0f03a08 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:15.902Z level=INFO msg="lease reaped" lease=ls_a0f03a08 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:15.914Z level=INFO msg="lease admitted" lease=ls_33f6a4fe parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:15.924Z level=INFO msg="lease reaped" lease=ls_33f6a4fe code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:16.267Z level=INFO msg="lease admitted" lease=ls_77e4e99d parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:16.277Z level=INFO msg="lease reaped" lease=ls_77e4e99d code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:16.573Z level=INFO msg="lease admitted" lease=ls_e80c3b3f parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:16.582Z level=INFO msg="lease reaped" lease=ls_e80c3b3f code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:16.631Z level=INFO msg="lease admitted" lease=ls_5642909c parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:16.640Z level=INFO msg="lease reaped" lease=ls_5642909c code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:16.645Z level=INFO msg="lease admitted" lease=ls_10d0f5cb parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:16.653Z level=INFO msg="lease reaped" lease=ls_10d0f5cb code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:16.751Z level=INFO msg="lease admitted" lease=ls_3f11c211 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:16.761Z level=INFO msg="lease reaped" lease=ls_3f11c211 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:16.961Z level=INFO msg="lease admitted" lease=ls_e06b06e9 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:16.970Z level=INFO msg="lease reaped" lease=ls_e06b06e9 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:17.326Z level=INFO msg="lease admitted" lease=ls_70eefb0e parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:17.336Z level=INFO msg="lease reaped" lease=ls_70eefb0e code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:17.337Z level=INFO msg="lease admitted" lease=ls_c24fb78e parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:17.345Z level=INFO msg="lease reaped" lease=ls_c24fb78e code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:17.374Z level=INFO msg="lease admitted" lease=ls_5a654eae parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:17.427Z level=INFO msg="lease reaped" lease=ls_5a654eae code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:17.690Z level=INFO msg="lease admitted" lease=ls_f19f110c parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:17.701Z level=INFO msg="lease reaped" lease=ls_f19f110c code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:18.059Z level=INFO msg="lease admitted" lease=ls_a8ca0f69 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:18.062Z level=INFO msg="lease admitted" lease=ls_b4bb43f7 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:18.072Z level=INFO msg="lease reaped" lease=ls_b4bb43f7 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:18.072Z level=INFO msg="lease reaped" lease=ls_a8ca0f69 code=520 name=EXTERNAL_ABORT
-time=2026-11-17T02:01:35.162Z level=INFO msg="lease admitted" lease=ls_bca0c8c2 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:01:35.163Z level=INFO msg="lease admitted" lease=ls_c74eee47 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:02:09.127Z level=INFO msg="lease reaped" lease=ls_c74eee47 code=200 name=COMPLETED
-time=2026-11-17T02:02:09.139Z level=INFO msg="lease admitted" lease=ls_359281bf parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:02:12.502Z level=INFO msg="lease reaped" lease=ls_359281bf code=413 name=OOM_LEASE_LIMIT
-time=2026-11-17T02:02:12.516Z level=INFO msg="lease admitted" lease=ls_fc153572 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:02:16.171Z level=INFO msg="lease admitted" lease=ls_3fab5804 parent=ls_bca0c8c2 kind=fix memory=935431372
-time=2026-11-17T02:02:35.525Z level=INFO msg="lease admitted" lease=ls_672537bc parent=ls_3fab5804 kind=fix memory=935431372
-time=2026-11-17T02:02:45.122Z level=INFO msg="lease admitted" lease=ls_778c424c parent=ls_fc153572 kind=fix memory=935431372
-time=2026-11-17T02:02:56.580Z level=INFO msg="lease reaped" lease=ls_672537bc code=200 name=COMPLETED
-time=2026-11-17T02:02:56.603Z level=INFO msg="lease reaped" lease=ls_3fab5804 code=200 name=COMPLETED
-time=2026-11-17T02:02:56.665Z level=INFO msg="lease reaped" lease=ls_bca0c8c2 code=200 name=COMPLETED
-time=2026-11-17T02:02:56.696Z level=INFO msg="lease admitted" lease=ls_a8619d40 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:02:57.190Z level=INFO msg="lease admitted" lease=ls_48287d01 parent=ls_778c424c kind=fix memory=935431372
-time=2026-11-17T02:03:15.239Z level=INFO msg="lease reaped" lease=ls_48287d01 code=200 name=COMPLETED
-time=2026-11-17T02:03:15.256Z level=INFO msg="lease reaped" lease=ls_778c424c code=200 name=COMPLETED
-time=2026-11-17T02:03:15.355Z level=INFO msg="lease reaped" lease=ls_fc153572 code=200 name=COMPLETED
-time=2026-11-17T02:03:15.367Z level=INFO msg="lease admitted" lease=ls_839acf1f parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:03:32.749Z level=INFO msg="lease reaped" lease=ls_a8619d40 code=200 name=COMPLETED
-time=2026-11-17T02:03:49.676Z level=INFO msg="lease reaped" lease=ls_839acf1f code=200 name=COMPLETED
-time=2026-11-17T02:07:46.175Z level=INFO msg="lease admitted" lease=ls_21a1cb4c parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:07:46.175Z level=INFO msg="lease admitted" lease=ls_d9e412bb parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:07:49.990Z level=INFO msg="lease reaped" lease=ls_d9e412bb code=413 name=OOM_LEASE_LIMIT
-time=2026-11-17T02:07:50.022Z level=INFO msg="lease admitted" lease=ls_a9b48147 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:08:15.069Z level=INFO msg="lease admitted" lease=ls_1e75850c parent=ls_21a1cb4c kind=fix memory=935431372
-time=2026-11-17T02:08:21.720Z level=INFO msg="lease reaped" lease=ls_1e75850c code=200 name=COMPLETED
-time=2026-11-17T02:08:21.819Z level=INFO msg="lease reaped" lease=ls_21a1cb4c code=200 name=COMPLETED
-time=2026-11-17T02:08:21.830Z level=INFO msg="lease admitted" lease=ls_534a06c0 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:08:27.383Z level=INFO msg="lease admitted" lease=ls_e05e3b05 parent=ls_a9b48147 kind=fix memory=935431372
-time=2026-11-17T02:08:43.359Z level=INFO msg="lease admitted" lease=ls_fa4bf433 parent=ls_e05e3b05 kind=fix memory=935431372
-time=2026-11-17T02:08:52.005Z level=INFO msg="lease resized" lease=ls_e05e3b05 memory=1403147058 by=on_near_limit
-time=2026-11-17T02:08:59.945Z level=INFO msg="lease admitted" lease=ls_e4df7640 parent=ls_534a06c0 kind=fix memory=935431372
-time=2026-11-17T02:09:01.403Z level=INFO msg="lease reaped" lease=ls_fa4bf433 code=200 name=COMPLETED
-time=2026-11-17T02:09:01.426Z level=INFO msg="lease reaped" lease=ls_e05e3b05 code=200 name=COMPLETED
-time=2026-11-17T02:09:01.533Z level=INFO msg="lease reaped" lease=ls_a9b48147 code=200 name=COMPLETED
-time=2026-11-17T02:09:01.550Z level=INFO msg="lease admitted" lease=ls_5a9259f1 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:09:05.005Z level=INFO msg="lease resized" lease=ls_5a9259f1 memory=4904069529 by=on_near_limit
-time=2026-11-17T02:09:07.654Z level=INFO msg="lease reaped" lease=ls_5a9259f1 code=413 name=OOM_LEASE_LIMIT
-time=2026-11-17T02:09:07.697Z level=INFO msg="lease admitted" lease=ls_c01755b0 parent=ls_a9656a47 kind=upgrade memory=3269379686
-time=2026-11-17T02:09:41.600Z level=INFO msg="lease admitted" lease=ls_001e6cac parent=ls_c01755b0 kind=fix memory=945271603
-time=2026-11-17T02:09:53.920Z level=INFO msg="lease admitted" lease=ls_3cdac063 parent=ls_001e6cac kind=fix memory=945271603
-time=2026-11-17T02:10:11.932Z level=INFO msg="lease reaped" lease=ls_3cdac063 code=200 name=COMPLETED
-time=2026-11-17T02:10:11.949Z level=INFO msg="lease reaped" lease=ls_001e6cac code=200 name=COMPLETED
-time=2026-11-17T02:10:12.061Z level=INFO msg="lease reaped" lease=ls_c01755b0 code=200 name=COMPLETED
-time=2026-11-17T02:10:12.075Z level=INFO msg="lease admitted" lease=ls_e636523c parent=ls_a9656a47 kind=upgrade memory=3023177318
-time=2026-11-17T02:10:12.082Z level=INFO msg="lease admitted" lease=ls_b6f9922d parent=ls_a9656a47 kind=upgrade memory=3023177318
-time=2026-11-17T02:10:41.019Z level=INFO msg="lease admitted" lease=ls_58243dc9 parent=ls_e636523c kind=fix memory=945271603
-time=2026-11-17T02:10:47.291Z level=INFO msg="lease reaped" lease=ls_58243dc9 code=200 name=COMPLETED
-time=2026-11-17T02:10:47.377Z level=INFO msg="lease reaped" lease=ls_e636523c code=200 name=COMPLETED
-time=2026-11-17T02:10:47.390Z level=INFO msg="lease admitted" lease=ls_6f09657a parent=ls_a9656a47 kind=upgrade memory=3023177318
-time=2026-11-17T02:10:48.168Z level=INFO msg="lease admitted" lease=ls_192b9e79 parent=ls_b6f9922d kind=fix memory=945271603
-time=2026-11-17T02:11:01.116Z level=INFO msg="lease admitted" lease=ls_493b32e4 parent=ls_192b9e79 kind=fix memory=945271603
-time=2026-11-17T02:11:14.222Z level=INFO msg="lease reaped" lease=ls_e4df7640 code=502 name=PARENT_DIED
-time=2026-11-17T02:11:14.222Z level=INFO msg="lease reaped" lease=ls_534a06c0 code=499 name=KILLED
-time=2026-11-17T02:11:14.254Z level=INFO msg="lease reaped" lease=ls_6f09657a code=499 name=KILLED
-time=2026-11-17T02:11:14.260Z level=INFO msg="lease reaped" lease=ls_493b32e4 code=502 name=PARENT_DIED
-time=2026-11-17T02:11:14.260Z level=INFO msg="lease reaped" lease=ls_192b9e79 code=502 name=PARENT_DIED
-time=2026-11-17T02:11:14.260Z level=INFO msg="lease reaped" lease=ls_b6f9922d code=499 name=KILLED
-time=2026-11-17T02:11:14.263Z level=INFO msg="lease reaped" lease=ls_a9656a47 code=200 name=COMPLETED
-time=2026-11-17T02:12:14.277Z level=INFO msg="shutting down: reaping every lease"
+time=2026-11-17T16:22:36.175Z level=INFO msg="subactld listening" socket=/tmp/out/C/run-4/subactl.sock backend=cgroup2 effective_capacity=10.2GiB reserve=1.8GiB
+time=2026-11-17T16:22:36.267Z level=INFO msg="lease admitted" lease=ls_f146d710 parent="" kind=lead memory=9663676416
+time=2026-11-17T16:24:36.292Z level=INFO msg="lease admitted" lease=ls_1eec1054 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:24:36.293Z level=INFO msg="lease admitted" lease=ls_df7fac48 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:24:36.294Z level=INFO msg="lease admitted" lease=ls_d22a21dd parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:25:03.160Z level=INFO msg="lease reaped" lease=ls_d22a21dd code=200 name=COMPLETED
+time=2026-11-17T16:25:03.169Z level=INFO msg="lease admitted" lease=ls_261069d1 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:25:03.700Z level=INFO msg="lease reaped" lease=ls_261069d1 code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:25:03.705Z level=INFO msg="lease admitted" lease=ls_cb38d2bd parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:25:04.244Z level=INFO msg="lease reaped" lease=ls_cb38d2bd code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:25:04.249Z level=INFO msg="lease admitted" lease=ls_2783dabf parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:25:04.774Z level=INFO msg="lease admitted" lease=ls_6edbe012 parent=ls_1eec1054 kind=fix memory=866682470
+time=2026-11-17T16:25:04.927Z level=INFO msg="lease admitted" lease=ls_f804d0cd parent=ls_df7fac48 kind=fix memory=866682470
+time=2026-11-17T16:25:17.008Z level=INFO msg="lease admitted" lease=ls_0106de47 parent=ls_f804d0cd kind=fix memory=866682470
+time=2026-11-17T16:25:17.339Z level=INFO msg="lease admitted" lease=ls_83897a20 parent=ls_6edbe012 kind=fix memory=866682470
+time=2026-11-17T16:25:31.022Z level=INFO msg="lease reaped" lease=ls_83897a20 code=200 name=COMPLETED
+time=2026-11-17T16:25:31.042Z level=INFO msg="lease reaped" lease=ls_6edbe012 code=200 name=COMPLETED
+time=2026-11-17T16:25:31.127Z level=INFO msg="lease reaped" lease=ls_1eec1054 code=200 name=COMPLETED
+time=2026-11-17T16:25:31.132Z level=INFO msg="lease admitted" lease=ls_e1317e3f parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:25:32.789Z level=INFO msg="lease reaped" lease=ls_2783dabf code=200 name=COMPLETED
+time=2026-11-17T16:25:32.794Z level=INFO msg="lease admitted" lease=ls_dcc8dccf parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:25:33.204Z level=INFO msg="lease reaped" lease=ls_0106de47 code=200 name=COMPLETED
+time=2026-11-17T16:25:33.247Z level=INFO msg="lease reaped" lease=ls_f804d0cd code=200 name=COMPLETED
+time=2026-11-17T16:25:33.325Z level=INFO msg="lease reaped" lease=ls_df7fac48 code=200 name=COMPLETED
+time=2026-11-17T16:25:33.330Z level=INFO msg="lease admitted" lease=ls_d42abb03 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:25:33.357Z level=INFO msg="lease reaped" lease=ls_dcc8dccf code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:25:33.365Z level=INFO msg="lease admitted" lease=ls_46ae6468 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:25:57.565Z level=INFO msg="lease admitted" lease=ls_f63e4741 parent=ls_e1317e3f kind=fix memory=866682470
+time=2026-11-17T16:25:59.554Z level=INFO msg="lease admitted" lease=ls_bbd96e29 parent=ls_d42abb03 kind=fix memory=866682470
+time=2026-11-17T16:26:03.223Z level=INFO msg="lease admitted" lease=ls_17b7c9db parent=ls_46ae6468 kind=fix memory=866682470
+time=2026-11-17T16:26:08.220Z level=INFO msg="lease admitted" lease=ls_1337b9ba parent=ls_f63e4741 kind=fix memory=866682470
+time=2026-11-17T16:26:10.255Z level=INFO msg="lease admitted" lease=ls_760d2698 parent=ls_bbd96e29 kind=fix memory=866682470
+time=2026-11-17T16:26:17.071Z level=INFO msg="lease admitted" lease=ls_98b95122 parent=ls_17b7c9db kind=fix memory=866682470
+time=2026-11-17T16:26:23.623Z level=INFO msg="lease reaped" lease=ls_1337b9ba code=200 name=COMPLETED
+time=2026-11-17T16:26:23.644Z level=INFO msg="lease reaped" lease=ls_f63e4741 code=200 name=COMPLETED
+time=2026-11-17T16:26:23.727Z level=INFO msg="lease reaped" lease=ls_e1317e3f code=200 name=COMPLETED
+time=2026-11-17T16:26:23.731Z level=INFO msg="lease admitted" lease=ls_19ed412c parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:26:25.554Z level=INFO msg="lease reaped" lease=ls_760d2698 code=200 name=COMPLETED
+time=2026-11-17T16:26:25.574Z level=INFO msg="lease reaped" lease=ls_bbd96e29 code=200 name=COMPLETED
+time=2026-11-17T16:26:25.658Z level=INFO msg="lease reaped" lease=ls_d42abb03 code=200 name=COMPLETED
+time=2026-11-17T16:26:25.663Z level=INFO msg="lease admitted" lease=ls_a2b4ad15 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:26:31.762Z level=INFO msg="lease reaped" lease=ls_98b95122 code=200 name=COMPLETED
+time=2026-11-17T16:26:31.781Z level=INFO msg="lease reaped" lease=ls_17b7c9db code=200 name=COMPLETED
+time=2026-11-17T16:26:31.849Z level=INFO msg="lease reaped" lease=ls_46ae6468 code=200 name=COMPLETED
+time=2026-11-17T16:26:31.854Z level=INFO msg="lease admitted" lease=ls_9b3f0b4c parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:26:32.407Z level=INFO msg="lease reaped" lease=ls_9b3f0b4c code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:26:32.412Z level=INFO msg="lease admitted" lease=ls_36da9516 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:26:51.397Z level=INFO msg="lease reaped" lease=ls_19ed412c code=200 name=COMPLETED
+time=2026-11-17T16:26:51.402Z level=INFO msg="lease admitted" lease=ls_2ac27338 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:26:53.031Z level=INFO msg="lease reaped" lease=ls_a2b4ad15 code=200 name=COMPLETED
+time=2026-11-17T16:26:53.036Z level=INFO msg="lease admitted" lease=ls_67952f82 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:26:53.625Z level=INFO msg="lease reaped" lease=ls_67952f82 code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:26:53.630Z level=INFO msg="lease admitted" lease=ls_31c17f1f parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:00.739Z level=INFO msg="lease admitted" lease=ls_c7ecbd3e parent=ls_36da9516 kind=fix memory=836817715
+time=2026-11-17T16:27:14.139Z level=INFO msg="lease admitted" lease=ls_30fd2fda parent=ls_c7ecbd3e kind=fix memory=836817715
+time=2026-11-17T16:27:18.986Z level=INFO msg="lease admitted" lease=ls_9255572b parent=ls_2ac27338 kind=fix memory=836817715
+time=2026-11-17T16:27:19.434Z level=INFO msg="lease admitted" lease=ls_f658d4a0 parent=ls_31c17f1f kind=fix memory=836817715
+time=2026-11-17T16:27:19.512Z level=INFO msg="lease reaped" lease=ls_30fd2fda code=502 name=PARENT_DIED
+time=2026-11-17T16:27:19.512Z level=INFO msg="lease reaped" lease=ls_c7ecbd3e code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:27:19.586Z level=INFO msg="lease reaped" lease=ls_36da9516 code=200 name=COMPLETED
+time=2026-11-17T16:27:19.591Z level=INFO msg="lease admitted" lease=ls_9301d398 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:30.254Z level=INFO msg="lease admitted" lease=ls_f91a0a8f parent=ls_f658d4a0 kind=fix memory=836817715
+time=2026-11-17T16:27:31.068Z level=INFO msg="lease admitted" lease=ls_31105cbb parent=ls_9255572b kind=fix memory=836817715
+time=2026-11-17T16:27:36.305Z level=INFO msg="lease reaped" lease=ls_f91a0a8f code=502 name=PARENT_DIED
+time=2026-11-17T16:27:36.305Z level=INFO msg="lease reaped" lease=ls_f658d4a0 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.312Z level=INFO msg="lease reaped" lease=ls_31105cbb code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.354Z level=INFO msg="lease reaped" lease=ls_9255572b code=502 name=PARENT_DIED
+time=2026-11-17T16:27:36.355Z level=INFO msg="lease reaped" lease=ls_2ac27338 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.359Z level=INFO msg="lease admitted" lease=ls_e7e34b68 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:36.364Z level=INFO msg="lease reaped" lease=ls_e7e34b68 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.364Z level=INFO msg="lease reaped" lease=ls_31c17f1f code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.367Z level=INFO msg="lease admitted" lease=ls_335ae621 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:36.368Z level=INFO msg="lease admitted" lease=ls_bc501ff0 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:36.369Z level=INFO msg="lease reaped" lease=ls_9301d398 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.371Z level=INFO msg="lease reaped" lease=ls_335ae621 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.371Z level=INFO msg="lease reaped" lease=ls_bc501ff0 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.372Z level=INFO msg="lease admitted" lease=ls_6b413d6d parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:36.374Z level=INFO msg="lease admitted" lease=ls_371971b3 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:36.375Z level=INFO msg="lease admitted" lease=ls_43cd9158 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:36.376Z level=INFO msg="lease reaped" lease=ls_6b413d6d code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.377Z level=INFO msg="lease reaped" lease=ls_371971b3 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.378Z level=INFO msg="lease reaped" lease=ls_43cd9158 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.379Z level=INFO msg="lease admitted" lease=ls_2e5dc6e5 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:36.380Z level=INFO msg="lease admitted" lease=ls_d9ffadae parent=ls_f146d710 kind=worker memory=1073741824
+time=2026-11-17T16:27:36.382Z level=INFO msg="lease reaped" lease=ls_2e5dc6e5 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.384Z level=INFO msg="lease reaped" lease=ls_d9ffadae code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.636Z level=INFO msg="lease admitted" lease=ls_63d85e18 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:36.643Z level=INFO msg="lease reaped" lease=ls_63d85e18 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.684Z level=INFO msg="lease admitted" lease=ls_308b06ab parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:36.693Z level=INFO msg="lease reaped" lease=ls_308b06ab code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:36.753Z level=INFO msg="lease admitted" lease=ls_9edf3365 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:36.761Z level=INFO msg="lease reaped" lease=ls_9edf3365 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:37.072Z level=INFO msg="lease admitted" lease=ls_bb0fbf58 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:37.078Z level=INFO msg="lease reaped" lease=ls_bb0fbf58 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:37.158Z level=INFO msg="lease admitted" lease=ls_d9f967ad parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:37.163Z level=INFO msg="lease admitted" lease=ls_ac904257 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:37.166Z level=INFO msg="lease reaped" lease=ls_d9f967ad code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:37.169Z level=INFO msg="lease reaped" lease=ls_ac904257 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:37.386Z level=INFO msg="lease admitted" lease=ls_b6eea257 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:37.387Z level=INFO msg="lease admitted" lease=ls_8031ddd5 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:37.396Z level=INFO msg="lease reaped" lease=ls_b6eea257 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:37.396Z level=INFO msg="lease reaped" lease=ls_8031ddd5 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:37.465Z level=INFO msg="lease admitted" lease=ls_a01cbfe0 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:37.474Z level=INFO msg="lease reaped" lease=ls_a01cbfe0 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:37.684Z level=INFO msg="lease admitted" lease=ls_88873b3a parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:37.693Z level=INFO msg="lease reaped" lease=ls_88873b3a code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:37.698Z level=INFO msg="lease admitted" lease=ls_62cc0e80 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:37.702Z level=INFO msg="lease reaped" lease=ls_62cc0e80 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:37.794Z level=INFO msg="lease admitted" lease=ls_416834d7 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:37.803Z level=INFO msg="lease reaped" lease=ls_416834d7 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:37.952Z level=INFO msg="lease admitted" lease=ls_9b77be7b parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:37.957Z level=INFO msg="lease admitted" lease=ls_98807f5f parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:37.962Z level=INFO msg="lease reaped" lease=ls_9b77be7b code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:37.966Z level=INFO msg="lease reaped" lease=ls_98807f5f code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:38.110Z level=INFO msg="lease admitted" lease=ls_007ddcbd parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:38.120Z level=INFO msg="lease reaped" lease=ls_007ddcbd code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:38.169Z level=INFO msg="lease admitted" lease=ls_a5979f9b parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:38.178Z level=INFO msg="lease reaped" lease=ls_a5979f9b code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:38.259Z level=INFO msg="lease admitted" lease=ls_c83da492 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:38.266Z level=INFO msg="lease reaped" lease=ls_c83da492 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:38.359Z level=INFO msg="lease admitted" lease=ls_a180a21d parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:38.369Z level=INFO msg="lease reaped" lease=ls_a180a21d code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:38.489Z level=INFO msg="lease admitted" lease=ls_2368668c parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:38.497Z level=INFO msg="lease reaped" lease=ls_2368668c code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:38.530Z level=INFO msg="lease admitted" lease=ls_de51c139 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:38.533Z level=INFO msg="lease admitted" lease=ls_526408e3 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:38.538Z level=INFO msg="lease reaped" lease=ls_de51c139 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:38.540Z level=INFO msg="lease reaped" lease=ls_526408e3 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:38.680Z level=INFO msg="lease admitted" lease=ls_5cde419b parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:38.686Z level=INFO msg="lease reaped" lease=ls_5cde419b code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:38.702Z level=INFO msg="lease admitted" lease=ls_a14b3e06 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:38.707Z level=INFO msg="lease reaped" lease=ls_a14b3e06 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:38.844Z level=INFO msg="lease admitted" lease=ls_4ec817b6 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:38.854Z level=INFO msg="lease reaped" lease=ls_4ec817b6 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:39.007Z level=INFO msg="lease admitted" lease=ls_f9fad0a3 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:39.016Z level=INFO msg="lease reaped" lease=ls_f9fad0a3 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:39.089Z level=INFO msg="lease admitted" lease=ls_574eb892 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:39.097Z level=INFO msg="lease reaped" lease=ls_574eb892 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:39.158Z level=INFO msg="lease admitted" lease=ls_b72b0ed9 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:39.165Z level=INFO msg="lease reaped" lease=ls_b72b0ed9 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:39.256Z level=INFO msg="lease admitted" lease=ls_f1d364fb parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:39.263Z level=INFO msg="lease reaped" lease=ls_f1d364fb code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:39.320Z level=INFO msg="lease admitted" lease=ls_1c258494 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:39.328Z level=INFO msg="lease reaped" lease=ls_1c258494 code=520 name=EXTERNAL_ABORT
+time=2026-11-17T16:27:57.305Z level=INFO msg="lease admitted" lease=ls_2ca73ec9 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:57.306Z level=INFO msg="lease admitted" lease=ls_0a21aaa5 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:27:57.308Z level=INFO msg="lease admitted" lease=ls_4e3a24ff parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:28:26.109Z level=INFO msg="lease admitted" lease=ls_7b6a7aa4 parent=ls_0a21aaa5 kind=fix memory=836817715
+time=2026-11-17T16:28:26.588Z level=INFO msg="lease admitted" lease=ls_84c8ec52 parent=ls_2ca73ec9 kind=fix memory=836817715
+time=2026-11-17T16:28:31.382Z level=INFO msg="lease admitted" lease=ls_e2ebe7af parent=ls_4e3a24ff kind=fix memory=836817715
+time=2026-11-17T16:28:39.109Z level=INFO msg="lease admitted" lease=ls_4496faf4 parent=ls_7b6a7aa4 kind=fix memory=836817715
+time=2026-11-17T16:28:39.736Z level=INFO msg="lease admitted" lease=ls_b4444f0b parent=ls_84c8ec52 kind=fix memory=836817715
+time=2026-11-17T16:28:48.787Z level=INFO msg="lease admitted" lease=ls_4e8ed0da parent=ls_e2ebe7af kind=fix memory=836817715
+time=2026-11-17T16:28:53.127Z level=INFO msg="lease reaped" lease=ls_4496faf4 code=200 name=COMPLETED
+time=2026-11-17T16:28:53.150Z level=INFO msg="lease reaped" lease=ls_7b6a7aa4 code=200 name=COMPLETED
+time=2026-11-17T16:28:53.230Z level=INFO msg="lease reaped" lease=ls_0a21aaa5 code=200 name=COMPLETED
+time=2026-11-17T16:28:53.234Z level=INFO msg="lease admitted" lease=ls_fc50c1bb parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:28:53.771Z level=INFO msg="lease reaped" lease=ls_b4444f0b code=200 name=COMPLETED
+time=2026-11-17T16:28:53.792Z level=INFO msg="lease reaped" lease=ls_84c8ec52 code=200 name=COMPLETED
+time=2026-11-17T16:28:53.931Z level=INFO msg="lease reaped" lease=ls_2ca73ec9 code=200 name=COMPLETED
+time=2026-11-17T16:28:53.940Z level=INFO msg="lease admitted" lease=ls_f46de493 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:28:54.072Z level=INFO msg="lease reaped" lease=ls_fc50c1bb code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:28:54.078Z level=INFO msg="lease admitted" lease=ls_83c3e8a6 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:28:54.888Z level=INFO msg="lease reaped" lease=ls_83c3e8a6 code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:28:54.893Z level=INFO msg="lease admitted" lease=ls_f9d821b5 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:29:07.881Z level=INFO msg="lease reaped" lease=ls_4e8ed0da code=200 name=COMPLETED
+time=2026-11-17T16:29:07.896Z level=INFO msg="lease reaped" lease=ls_e2ebe7af code=200 name=COMPLETED
+time=2026-11-17T16:29:07.948Z level=INFO msg="lease reaped" lease=ls_4e3a24ff code=200 name=COMPLETED
+time=2026-11-17T16:29:07.953Z level=INFO msg="lease admitted" lease=ls_4941629f parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:29:20.869Z level=INFO msg="lease admitted" lease=ls_5e6e90e1 parent=ls_f9d821b5 kind=fix memory=836817715
+time=2026-11-17T16:29:21.716Z level=INFO msg="lease admitted" lease=ls_4a027923 parent=ls_f46de493 kind=fix memory=836817715
+time=2026-11-17T16:29:27.923Z level=INFO msg="lease admitted" lease=ls_e815a0b7 parent=ls_4941629f kind=fix memory=836817715
+time=2026-11-17T16:29:31.713Z level=INFO msg="lease admitted" lease=ls_f3308140 parent=ls_5e6e90e1 kind=fix memory=836817715
+time=2026-11-17T16:29:32.384Z level=INFO msg="lease reaped" lease=ls_e815a0b7 code=200 name=COMPLETED
+time=2026-11-17T16:29:32.467Z level=INFO msg="lease reaped" lease=ls_4941629f code=200 name=COMPLETED
+time=2026-11-17T16:29:32.472Z level=INFO msg="lease admitted" lease=ls_75b81518 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:29:33.766Z level=INFO msg="lease admitted" lease=ls_619d92fa parent=ls_4a027923 kind=fix memory=836817715
+time=2026-11-17T16:29:47.437Z level=INFO msg="lease reaped" lease=ls_f3308140 code=200 name=COMPLETED
+time=2026-11-17T16:29:47.457Z level=INFO msg="lease reaped" lease=ls_5e6e90e1 code=200 name=COMPLETED
+time=2026-11-17T16:29:47.531Z level=INFO msg="lease reaped" lease=ls_f9d821b5 code=200 name=COMPLETED
+time=2026-11-17T16:29:48.432Z level=INFO msg="lease reaped" lease=ls_619d92fa code=200 name=COMPLETED
+time=2026-11-17T16:29:48.451Z level=INFO msg="lease reaped" lease=ls_4a027923 code=200 name=COMPLETED
+time=2026-11-17T16:29:48.521Z level=INFO msg="lease reaped" lease=ls_f46de493 code=200 name=COMPLETED
+time=2026-11-17T16:29:51.864Z level=INFO msg="lease reaped" lease=ls_75b81518 code=200 name=COMPLETED
+time=2026-11-17T16:34:08.409Z level=INFO msg="lease admitted" lease=ls_2d7eda6f parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:34:08.684Z level=INFO msg="lease admitted" lease=ls_82de4f64 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:34:08.782Z level=INFO msg="lease admitted" lease=ls_5c905d82 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:34:09.399Z level=INFO msg="lease reaped" lease=ls_5c905d82 code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:34:09.404Z level=INFO msg="lease admitted" lease=ls_31e2d59f parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:34:29.523Z level=INFO msg="lease admitted" lease=ls_e19ef874 parent=ls_31e2d59f kind=fix memory=836817715
+time=2026-11-17T16:34:33.909Z level=INFO msg="lease admitted" lease=ls_41e7d98d parent=ls_e19ef874 kind=fix memory=836817715
+time=2026-11-17T16:34:35.368Z level=INFO msg="lease admitted" lease=ls_404b2d58 parent=ls_2d7eda6f kind=fix memory=836817715
+time=2026-11-17T16:34:35.641Z level=INFO msg="lease reaped" lease=ls_82de4f64 code=200 name=COMPLETED
+time=2026-11-17T16:34:35.648Z level=INFO msg="lease admitted" lease=ls_45fe2993 parent=ls_f146d710 kind=upgrade memory=3053916979
+time=2026-11-17T16:34:41.026Z level=INFO msg="lease reaped" lease=ls_41e7d98d code=200 name=COMPLETED
+time=2026-11-17T16:34:41.041Z level=INFO msg="lease reaped" lease=ls_e19ef874 code=200 name=COMPLETED
+time=2026-11-17T16:34:41.129Z level=INFO msg="lease reaped" lease=ls_31e2d59f code=200 name=COMPLETED
+time=2026-11-17T16:34:41.135Z level=INFO msg="lease admitted" lease=ls_7e43a56a parent=ls_f146d710 kind=upgrade memory=3076772659
+time=2026-11-17T16:34:41.693Z level=INFO msg="lease reaped" lease=ls_7e43a56a code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:34:41.701Z level=INFO msg="lease admitted" lease=ls_5d3b302e parent=ls_f146d710 kind=upgrade memory=3076772659
+time=2026-11-17T16:34:46.219Z level=INFO msg="lease admitted" lease=ls_1dce2ac0 parent=ls_404b2d58 kind=fix memory=836817715
+time=2026-11-17T16:34:55.852Z level=INFO msg="lease reaped" lease=ls_45fe2993 code=200 name=COMPLETED
+time=2026-11-17T16:34:55.942Z level=INFO msg="lease admitted" lease=ls_4e60b8d3 parent=ls_f146d710 kind=upgrade memory=3076772659
+time=2026-11-17T16:34:56.533Z level=INFO msg="lease reaped" lease=ls_4e60b8d3 code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:34:56.640Z level=INFO msg="lease admitted" lease=ls_e872fa85 parent=ls_f146d710 kind=upgrade memory=3076772659
+time=2026-11-17T16:34:57.440Z level=INFO msg="lease reaped" lease=ls_e872fa85 code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:34:57.445Z level=INFO msg="lease admitted" lease=ls_65134a27 parent=ls_f146d710 kind=worker memory=1073741824
+time=2026-11-17T16:35:01.548Z level=INFO msg="lease reaped" lease=ls_1dce2ac0 code=200 name=COMPLETED
+time=2026-11-17T16:35:01.568Z level=INFO msg="lease reaped" lease=ls_404b2d58 code=200 name=COMPLETED
+time=2026-11-17T16:35:01.623Z level=INFO msg="lease reaped" lease=ls_2d7eda6f code=200 name=COMPLETED
+time=2026-11-17T16:35:01.726Z level=INFO msg="lease admitted" lease=ls_7a52500e parent=ls_f146d710 kind=upgrade memory=3087910502
+time=2026-11-17T16:35:07.515Z level=INFO msg="lease admitted" lease=ls_5ca1b040 parent=ls_5d3b302e kind=fix memory=836817715
+time=2026-11-17T16:35:10.181Z level=INFO msg="lease reaped" lease=ls_65134a27 code=414 name=OUTPUT_EXCEEDED
+time=2026-11-17T16:35:10.207Z level=INFO msg="lease admitted" lease=ls_3240a30b parent=ls_f146d710 kind=upgrade memory=3087910502
+time=2026-11-17T16:35:18.315Z level=INFO msg="lease admitted" lease=ls_befcd128 parent=ls_5ca1b040 kind=fix memory=836817715
+time=2026-11-17T16:35:29.688Z level=INFO msg="lease admitted" lease=ls_c19bd454 parent=ls_3240a30b kind=fix memory=836817715
+time=2026-11-17T16:35:30.333Z level=INFO msg="lease admitted" lease=ls_88c999f7 parent=ls_7a52500e kind=fix memory=836817715
+time=2026-11-17T16:35:33.769Z level=INFO msg="lease reaped" lease=ls_befcd128 code=200 name=COMPLETED
+time=2026-11-17T16:35:33.790Z level=INFO msg="lease reaped" lease=ls_5ca1b040 code=200 name=COMPLETED
+time=2026-11-17T16:35:33.862Z level=INFO msg="lease reaped" lease=ls_5d3b302e code=200 name=COMPLETED
+time=2026-11-17T16:35:33.865Z level=INFO msg="lease admitted" lease=ls_54c0c1d3 parent=ls_f146d710 kind=upgrade memory=3087910502
+time=2026-11-17T16:35:34.309Z level=INFO msg="lease reaped" lease=ls_c19bd454 code=200 name=COMPLETED
+time=2026-11-17T16:35:34.389Z level=INFO msg="lease reaped" lease=ls_3240a30b code=200 name=COMPLETED
+time=2026-11-17T16:35:34.573Z level=INFO msg="lease admitted" lease=ls_f0a7e601 parent=ls_f146d710 kind=upgrade memory=3087910502
+time=2026-11-17T16:35:43.363Z level=INFO msg="lease admitted" lease=ls_df96c174 parent=ls_88c999f7 kind=fix memory=834527232
+time=2026-11-17T16:35:57.560Z level=INFO msg="lease reaped" lease=ls_df96c174 code=200 name=COMPLETED
+time=2026-11-17T16:35:57.580Z level=INFO msg="lease reaped" lease=ls_88c999f7 code=200 name=COMPLETED
+time=2026-11-17T16:35:57.670Z level=INFO msg="lease reaped" lease=ls_7a52500e code=200 name=COMPLETED
+time=2026-11-17T16:35:57.930Z level=INFO msg="lease admitted" lease=ls_92e85b18 parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:36:03.461Z level=INFO msg="lease reaped" lease=ls_f0a7e601 code=200 name=COMPLETED
+time=2026-11-17T16:36:03.575Z level=INFO msg="lease admitted" lease=ls_36a0b2a9 parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:36:03.834Z level=INFO msg="lease admitted" lease=ls_395759f0 parent=ls_54c0c1d3 kind=fix memory=834527232
+time=2026-11-17T16:36:18.264Z level=INFO msg="lease admitted" lease=ls_cf4aae50 parent=ls_395759f0 kind=fix memory=834527232
+time=2026-11-17T16:36:23.853Z level=INFO msg="lease admitted" lease=ls_2fd7b80e parent=ls_92e85b18 kind=fix memory=834527232
+time=2026-11-17T16:36:32.200Z level=INFO msg="lease reaped" lease=ls_36a0b2a9 code=200 name=COMPLETED
+time=2026-11-17T16:36:32.223Z level=INFO msg="lease admitted" lease=ls_3fc4efad parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:36:32.788Z level=INFO msg="lease reaped" lease=ls_3fc4efad code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:36:32.811Z level=INFO msg="lease admitted" lease=ls_7e5b985a parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:36:32.902Z level=INFO msg="lease reaped" lease=ls_cf4aae50 code=200 name=COMPLETED
+time=2026-11-17T16:36:32.921Z level=INFO msg="lease reaped" lease=ls_395759f0 code=200 name=COMPLETED
+time=2026-11-17T16:36:33.016Z level=INFO msg="lease reaped" lease=ls_54c0c1d3 code=200 name=COMPLETED
+time=2026-11-17T16:36:33.033Z level=INFO msg="lease admitted" lease=ls_422509f5 parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:36:33.370Z level=INFO msg="lease reaped" lease=ls_7e5b985a code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:36:33.434Z level=INFO msg="lease admitted" lease=ls_57a32f31 parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:36:34.437Z level=INFO msg="lease admitted" lease=ls_1d3e509f parent=ls_2fd7b80e kind=fix memory=834527232
+time=2026-11-17T16:36:48.947Z level=INFO msg="lease reaped" lease=ls_1d3e509f code=200 name=COMPLETED
+time=2026-11-17T16:36:48.967Z level=INFO msg="lease reaped" lease=ls_2fd7b80e code=200 name=COMPLETED
+time=2026-11-17T16:36:49.058Z level=INFO msg="lease reaped" lease=ls_92e85b18 code=200 name=COMPLETED
+time=2026-11-17T16:36:49.528Z level=INFO msg="lease admitted" lease=ls_3944c6f8 parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:36:52.984Z level=INFO msg="lease admitted" lease=ls_c2494fb1 parent=ls_422509f5 kind=fix memory=834527232
+time=2026-11-17T16:36:57.593Z level=INFO msg="lease reaped" lease=ls_c2494fb1 code=200 name=COMPLETED
+time=2026-11-17T16:36:57.677Z level=INFO msg="lease reaped" lease=ls_422509f5 code=200 name=COMPLETED
+time=2026-11-17T16:36:57.818Z level=INFO msg="lease admitted" lease=ls_c0d53df5 parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:37:00.466Z level=INFO msg="lease reaped" lease=ls_57a32f31 code=200 name=COMPLETED
+time=2026-11-17T16:37:01.539Z level=INFO msg="lease admitted" lease=ls_41968f7d parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:37:02.138Z level=INFO msg="lease reaped" lease=ls_41968f7d code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:37:02.146Z level=INFO msg="lease admitted" lease=ls_054242a9 parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:37:15.576Z level=INFO msg="lease admitted" lease=ls_5b95bb04 parent=ls_3944c6f8 kind=fix memory=834527232
+time=2026-11-17T16:37:17.903Z level=INFO msg="lease reaped" lease=ls_c0d53df5 code=200 name=COMPLETED
+time=2026-11-17T16:37:18.341Z level=INFO msg="lease admitted" lease=ls_ca261e67 parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:37:18.937Z level=INFO msg="lease reaped" lease=ls_ca261e67 code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:37:20.075Z level=INFO msg="lease admitted" lease=ls_223becf7 parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:37:26.473Z level=INFO msg="lease admitted" lease=ls_cb6f8cd8 parent=ls_5b95bb04 kind=fix memory=834527232
+time=2026-11-17T16:37:28.773Z level=INFO msg="lease reaped" lease=ls_054242a9 code=200 name=COMPLETED
+time=2026-11-17T16:37:29.118Z level=INFO msg="lease admitted" lease=ls_cdb93325 parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:37:29.967Z level=INFO msg="lease reaped" lease=ls_cdb93325 code=413 name=OOM_LEASE_LIMIT
+time=2026-11-17T16:37:30.225Z level=INFO msg="lease admitted" lease=ls_3934a3e9 parent=ls_f146d710 kind=upgrade memory=3111016857
+time=2026-11-17T16:37:36.345Z level=INFO msg="lease reaped" lease=ls_3934a3e9 code=499 name=KILLED
+time=2026-11-17T16:37:36.387Z level=INFO msg="lease reaped" lease=ls_223becf7 code=499 name=KILLED
+time=2026-11-17T16:37:36.398Z level=INFO msg="lease reaped" lease=ls_cb6f8cd8 code=502 name=PARENT_DIED
+time=2026-11-17T16:37:36.398Z level=INFO msg="lease reaped" lease=ls_5b95bb04 code=502 name=PARENT_DIED
+time=2026-11-17T16:37:36.398Z level=INFO msg="lease reaped" lease=ls_3944c6f8 code=499 name=KILLED
+time=2026-11-17T16:37:36.406Z level=INFO msg="lease reaped" lease=ls_f146d710 code=200 name=COMPLETED
+time=2026-11-17T16:38:36.432Z level=INFO msg="shutting down: reaping every lease"

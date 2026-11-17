@@ -1,0 +1,16 @@
+{
+  "code": 200,
+  "name": "COMPLETED",
+  "lease": "ls_8417898c",
+  "kind": "lead",
+  "mem_basis": "working_set",
+  "peak": 6476726272,
+  "limit": 9663676416,
+  "enforcement": "hard",
+  "evidence": {
+    "exit_code": 0,
+    "reaped_pids": 37
+  },
+  "message": "lead ls_8417898c completed: its main process exited with status 0.",
+  "at": "2026-11-17T00:02:18.799962136Z"
+}

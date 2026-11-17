@@ -1,0 +1,30 @@
+{
+  "group": "A",
+  "run": 5,
+  "scenario": "radix.yaml",
+  "chamber_bytes": 12884901888,
+  "mem_basis": "working_set",
+  "host_peak_ws": 12,
+  "host_oom": 118648,
+  "oom_kills": 1138,
+  "meltdown": false,
+  "orphans_after": 29,
+  "leaked_ws_after": 2.8534088134765625,
+  "completion": 0.037037037037037035,
+  "packages": 54,
+  "work_lost": 30,
+  "util_mean": 0.6030067497547774,
+  "safety_net_count": 0,
+  "makespan": 15.001121850583333,
+  "lead_exit": 0,
+  "orphan_sample": [
+    "node /srv/radix/wt/a-17-5/use-rect/node_modules/.bin/storybook dev -p 9093 --ci --no-open",
+    "node /srv/radix/wt/a-17-5/visually-hidden/node_modules/.bin/storybook dev -p 9094 --ci --no-open",
+    "/srv/radix/wt/a-17-5/use-rect/node_modules/@storybook/core-common/node_modules/@esbuild/linux-arm64/bin/esbuild --servic…",
+    "/srv/radix/wt/a-17-5/visually-hidden/node_modules/@storybook/core-common/node_modules/@esbuild/linux-arm64/bin/esbuild -…",
+    "/srv/radix/wt/a-17-5/use-rect/node_modules/@storybook/builder-manager/node_modules/@esbuild/linux-arm64/bin/esbuild --se…",
+    "/srv/radix/wt/a-17-5/visually-hidden/node_modules/@storybook/builder-manager/node_modules/@esbuild/linux-arm64/bin/esbui…",
+    "/srv/radix/pw/browsers/chromium-1117/chrome-linux/chrome --headless=new --remote-debugging-port=39228 --user-data-dir=/t…",
+    "/srv/radix/pw/browsers/chromium-1117/chrome-linux/chrome_crashpad_handler --monitor-self --monitor-self-annotation=ptype…"
+  ]
+}

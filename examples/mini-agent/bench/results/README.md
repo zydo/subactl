@@ -5,49 +5,84 @@ directory: the verdicts on the four hypotheses, the tables, the charts and
 `series.parquet`. This file adds what the generated report cannot say:
 how the runs were made and how far the conclusions reach.
 
+This is round 3, the one the design's conclusions rest on. Earlier rounds
+are kept for the record: `round-2/` (Docker Desktop, before the fixes
+listed below) and `round-1/` (void).
+
 ## Setup
 
 - Scenario `scenarios/radix.yaml`: upgrade radix-ui/primitives to React 19
   with the scripted brain, the same file and seed for all three groups.
-- Five runs per group, on 2026-11-16, in a Docker chamber (Linux 7.0
-  arm64, 10 CPUs) capped at 12GiB. Groups B and C run under subactl with a
+- Five runs per group, on 2026-11-17, on a physical machine: Intel Core
+  Ultra 9 285K (24 cores), 60GB, Ubuntu 26.04, Linux 7.0, x86-64. Each run
+  is in a privileged Docker container whose blast chamber, an outer
+  cgroup, is capped at 12GiB. Groups B and C run under subactl with a
   1.8GiB reserve line inside the chamber.
 - Group A: no subactl. Group B: fixed envelopes. Group C: envelopes from
   `subactl suggest` once there is history, growing by half on NEAR_LIMIT;
   its history carries over from run to run.
+- Built from commit `841f605`, which includes every fix found up to then:
+  suggestions count only leases that ended well, lease output goes through
+  the daemon and stops at its limit, agents keep their supplementary
+  groups and cannot gain privileges.
 
 ## Verdicts
 
 | | verdict | in short |
 | --- | --- | --- |
-| H1 | holds | A left 29 to 59 processes behind in every run; B and C left none in any run |
+| H1 | refuted, in one run of A | A left 12 to 116 processes behind in four runs and none in the fifth; B and C left none in any run |
 | H2 | holds | A hit the chamber's cap in every run; B and C never did |
-| H3 | refuted | C's utilisation is 4.4 points above B's, not 15, and C lost more work (13.6 against 8.8 subtasks) |
+| H3 | refuted | C's utilisation is 5.5 points above B's, not 15, and C lost more work (20.2 against 14.2 subtasks) |
 | H4 | holds, but untested | the safety net never fired in B or C, so the hypothesis was not put under strain |
 
-Completion was 5% without subactl, 28% with fixed envelopes and 34% with
+Completion was 4% without subactl, 40% with fixed envelopes and 51% with
 suggested ones.
 
 ## How far this reaches
 
+- **H1 fails on the letter, not on the substance.** It asks that A leave
+  processes behind in every run. In run 3 of A the chamber was so short of
+  memory that the kernel's OOM killer killed 2,540 processes, the orphans
+  among them, and by the time of the count nothing was left; that run
+  also completed nothing. The rule was fixed before the runs and is not
+  changed after them, so the verdict stands. What the design cares about,
+  that B and C never leave anything behind, held in all ten runs.
+- **H3 is refuted on both counts, as in round 2, but the cause is now a
+  different one.** The suggestion no longer climbs: the envelopes given to
+  upgrade workers stayed between 2,877 and 2,985MiB in all five runs of C
+  (B uses a fixed 3,500MiB). Tighter envelopes ran more workers at once and
+  completed more (51% against 40%), but the greedy workers among them hit
+  their limit more often, so more work was lost. Utilisation is low in
+  both groups because admission counts envelopes, not use: two or three
+  worker envelopes fill a lead's 9GiB while the workers in them use far
+  less.
 - **H4 says less than it seems.** The interference took 30% of the
-  chamber, and the leads' 9GiB envelopes left enough room that available
-  memory never fell below the reserve line. That the net warns first and
-  ends exactly one lease is shown by the integration test for F8, on real
-  memory, not by these runs.
-- **H3 is refuted on both counts, and the second matters more.** Group C's
-  tighter envelopes ran more workers at once and completed more, but the
-  greedy workers were killed at their limit more often: a suggestion built
-  from workers that finished says nothing about the ones that never fit.
+  chamber and available memory never fell below the reserve line. That
+  the net warns first and ends exactly one lease is shown by the
+  integration tests for F8 and F10 on real memory, not by these runs.
 - **The chamber is an outer cgroup, not a separate machine.** "The host
   goes down" is seen here as the cap being hit and processes being killed
-  inside it, not as an unresponsive host. The watchdog never declared a
-  meltdown.
-- **Completion is low in every group** because 54 packages do not fit in
-  13 minutes at two or three workers at a time. It compares the groups; it
-  is not a measure of the task.
+  inside it. The watchdog never declared a meltdown.
+- **Completion compares the groups; it does not measure the task.** 54
+  packages do not fit in 13 minutes at two or three workers at a time.
+  Every run of B and C also fails `slot`, whose stories raise
+  `React.Children.only` under React 19: a real failure of the task.
 - **Many leases end with 520 in B and C.** During the 20 seconds of the
   simulated usage limit, each worker that is started fails its first model
-  call and exits; the lead dispatches them again afterwards. The same
-  happens in group A, where it is not recorded by code.
-- **Round 1 is void** and kept in `round-1/` with the reasons.
+  call and exits; the lead dispatches them again afterwards.
+- **414 now appears in B as well as C.** The runaway worker's output is
+  counted as it passes through the daemon, so it is ended for its output
+  before the page cache can push it over its memory limit. In round 2 no
+  run of B ended a lease with 414.
+
+## A void first attempt
+
+The first attempt at this round completed nothing in any run of any
+group. The screenshot check starts a browser of its own for G2, and on
+this host Chromium refuses to start without its sandbox unless it runs
+as root: Ubuntu 26.04 restricts the user namespaces the sandbox needs, a
+restriction Docker Desktop does not have. Every check failed at once. The
+check now starts that browser without the sandbox, as Playwright's own
+launch does, and `run.sh` keeps each run's task results and transcripts
+(`agents.tgz`, not committed for size) so that a run like that can be
+diagnosed without running it again.

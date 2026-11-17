@@ -11,8 +11,9 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
 
 - **M0, contract and skeleton: done.** The contract, the public Go client,
   the in-memory ledger, the lease lifecycle and the CLI.
-- **M1, baseline: done.** `examples/mini-agent` in `without` mode
-  reproduces the problem in five of five runs; see
+- **M1, baseline: done.** `examples/mini-agent` in `without` mode hits
+  the memory cap in five of five runs and leaves processes behind in four
+  (in the fifth the kernel's OOM killer took the orphans too); see
   [the results](examples/mini-agent/bench/results/README.md).
 - **M2, Linux enforcement core: done.** The cgroup v2 backend, the pre-exec
   shim, nested leases, whole-group reaping, escape prevention and
@@ -28,9 +29,11 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
   termination, declared policies, progress beacons, idle detection,
   `subactl top`, and the skill in [skill/subactl.md](skill/subactl.md).
 - **M5, experiments: done.** Three groups, five runs each, on the radix
-  upgrade task: without subactl every run leaves processes behind and hits
-  the memory cap; with it none does. Two of the four hypotheses hold, one
-  holds without having been put under strain, one is refuted. See
+  upgrade task, on a physical x86-64 machine: without subactl every run
+  hits the memory cap and four of five leave processes behind; with it no
+  run of ten does either. Completion is 4% without subactl, 40% with
+  fixed envelopes and 51% with suggested ones. One hypothesis holds, one
+  holds without having been put under strain, two are refuted. See
   [the results](examples/mini-agent/bench/results/README.md).
 - **The real brain** speaks the Anthropic Messages API over `net/http` and
   has been run against DeepSeek and Z.AI through their compatible

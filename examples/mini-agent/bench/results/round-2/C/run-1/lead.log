@@ -1,0 +1,16 @@
+{
+  "code": 200,
+  "name": "COMPLETED",
+  "lease": "ls_d3debb4f",
+  "kind": "lead",
+  "mem_basis": "working_set",
+  "peak": 7399264256,
+  "limit": 9663676416,
+  "enforcement": "hard",
+  "evidence": {
+    "exit_code": 0,
+    "reaped_pids": 41
+  },
+  "message": "lead ls_d3debb4f completed: its main process exited with status 0.",
+  "at": "2026-11-17T01:22:50.91995497Z"
+}

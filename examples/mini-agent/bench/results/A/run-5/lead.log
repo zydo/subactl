@@ -3,45 +3,41 @@
     0s [lead] ← bash #1 accessible-icon accordion alert-dialog announce arrow aspect-ratio avatar checkbox collapsible collection compose-refs context context-menu dialog direction dismissable-layer dropdown-menu focus-guard…
   2m0s [lead] One worker per package, in parallel.
   2m0s [lead] → bash #2 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
-  5m0s [lead] usage limit: killed subagent upgrade:accessible-icon.d1 (pid 128442)
-  5m0s [lead] usage limit: killed subagent upgrade:accordion.d1 (pid 128443)
-  5m0s [lead] usage limit: killed subagent upgrade:alert-dialog.d1 (pid 128444)
-  5m0s [lead] usage limit: killed subagent upgrade:announce.d1 (pid 128445)
-  5m0s [lead] usage limit: killed subagent upgrade:aspect-ratio.d1 (pid 128447)
-  5m0s [lead] usage limit: killed subagent upgrade:checkbox.d1 (pid 128449)
-  5m0s [lead] usage limit: killed subagent upgrade:collapsible.d1 (pid 128450)
-  5m0s [lead] usage limit: killed subagent upgrade:collection.d1 (pid 128482)
-  5m0s [lead] usage limit: killed subagent upgrade:compose-refs.d1 (pid 128490)
-  5m0s [lead] usage limit: killed subagent upgrade:context.d1 (pid 128503)
-  5m0s [lead] usage limit: killed subagent upgrade:context-menu.d1 (pid 128567)
-  5m0s [lead] usage limit: killed subagent upgrade:dialog.d1 (pid 128602)
-  5m0s [lead] usage limit: killed subagent upgrade:direction.d1 (pid 128632)
-  5m0s [lead] usage limit: killed subagent upgrade:dismissable-layer.d1 (pid 128644)
-  5m0s [lead] usage limit: killed subagent upgrade:dropdown-menu.d1 (pid 128661)
-  5m0s [lead] usage limit: killed subagent upgrade:focus-guards.d1 (pid 128668)
-  5m0s [lead] usage limit: killed subagent upgrade:focus-scope.d1 (pid 128675)
-  5m0s [lead] usage limit: killed subagent upgrade:hover-card.d1 (pid 128721)
-  5m0s [lead] usage limit: killed subagent upgrade:id.d1 (pid 128743)
-  5m0s [lead] usage limit: killed subagent upgrade:label.d1 (pid 128758)
-  5m0s [lead] usage limit: killed subagent upgrade:menu.d1 (pid 128766)
-  5m0s [lead] usage limit: killed subagent upgrade:menubar.d1 (pid 128786)
-  5m0s [lead] usage limit: killed subagent upgrade:navigation-menu.d1 (pid 128791)
-  5m0s [lead] usage limit: killed subagent upgrade:popover.d1 (pid 128835)
-  5m0s [lead] usage limit: killed subagent upgrade:popper.d1 (pid 128849)
-  5m0s [lead] usage limit: killed subagent upgrade:portal.d1 (pid 128850)
-  5m0s [lead] usage limit: killed subagent upgrade:presence.d1 (pid 128863)
-  5m0s [lead] usage limit: killed subagent upgrade:primitive.d1 (pid 128879)
-  5m0s [lead] usage limit: killed subagent upgrade:progress.d1 (pid 128885)
-  5m0s [lead] usage limit: killed subagent upgrade:radio-group.d1 (pid 136900)
-  5m1s [lead] ← bash #2 dispatching 55 workers, at most 32 at a time 2m0s [upgrade:collapsible] Setting up a worktree for collapsible. 2m0s [upgrade:alert-dialog] Setting up a worktree for alert-dialog. 2m0s [upgrade:checkbo…
-  5m1s [lead] ! llm: usage limit reached
+  5m0s [lead] usage limit: killed subagent upgrade:checkbox.d1 (pid 134826)
+  5m0s [lead] usage limit: killed subagent upgrade:dialog.d1 (pid 134913)
+  5m0s [lead] usage limit: killed subagent upgrade:radio-group.d1 (pid 147333)
+  5m0s [lead] usage limit: killed subagent upgrade:roving-focus.d1 (pid 148403)
+  5m0s [lead] usage limit: killed subagent upgrade:scroll-area.d1 (pid 148462)
+  5m0s [lead] usage limit: killed subagent upgrade:select.d1 (pid 148591)
+  5m0s [lead] usage limit: killed subagent upgrade:separator.d1 (pid 148873)
+  5m0s [lead] usage limit: killed subagent upgrade:slider.d1 (pid 149035)
+  5m0s [lead] usage limit: killed subagent upgrade:slot.d1 (pid 149381)
+  5m0s [lead] usage limit: killed subagent upgrade:switch.d1 (pid 149470)
+  5m0s [lead] usage limit: killed subagent upgrade:tabs.d1 (pid 149511)
+  5m0s [lead] usage limit: killed subagent upgrade:toast.d1 (pid 149597)
+  5m0s [lead] usage limit: killed subagent upgrade:toggle.d1 (pid 150404)
+  5m0s [lead] usage limit: killed subagent upgrade:toggle-group.d1 (pid 150410)
+  5m0s [lead] usage limit: killed subagent upgrade:toolbar.d1 (pid 150529)
+  5m0s [lead] usage limit: killed subagent upgrade:tooltip.d1 (pid 150564)
+  5m0s [lead] usage limit: killed subagent upgrade:use-callback-ref.d1 (pid 150631)
+  5m0s [lead] usage limit: killed subagent upgrade:use-controllable-state.d1 (pid 150649)
+  5m0s [lead] usage limit: killed subagent upgrade:use-escape-keydown.d1 (pid 150711)
+  5m0s [lead] usage limit: killed subagent upgrade:use-layout-effect.d1 (pid 150739)
+  5m0s [lead] usage limit: killed subagent upgrade:use-previous.d1 (pid 150782)
+  5m0s [lead] usage limit: killed subagent upgrade:use-rect.d1 (pid 150817)
+  5m0s [lead] usage limit: killed subagent upgrade:use-size.d1 (pid 151123)
+  5m0s [lead] usage limit: killed subagent upgrade:visually-hidden.d1 (pid 154260)
+  5m0s [lead] usage limit: killed subagent runaway.d1 (pid 155123)
+  5m0s [lead] ← bash #2 dispatching 55 workers, at most 32 at a time 2m0s [upgrade:accordion] Setting up a worktree for accordion. 2m0s [upgrade:accordion] → bash #1 {"command":"\"$TASK_DIR/setup.sh\"","timeout":600} 2m0s …
+  5m0s [lead] ! llm: usage limit reached
  5m21s [lead] Some workers did not report back. Dispatching those again.
  5m21s [lead] → bash #3 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
- 15m0s [lead] ← bash #3 dispatching 55 workers, at most 32 at a time 5m21s [upgrade:accessible-icon] Setting up a worktree for accessible-icon. 5m21s [upgrade:alert-dialog] Setting up a worktree for alert-dialog. 5m21s [upgr…
+ 15m0s [lead] ← bash #3 dispatching 25 workers, at most 32 at a time 5m21s [upgrade:checkbox] Setting up a worktree for checkbox. 5m21s [upgrade:dialog] Setting up a worktree for dialog. 5m21s [upgrade:checkbox] → bash #1 …
  15m0s [lead] Checking once more for packages without a result.
  15m0s [lead] → bash #4 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
  15m0s [lead] ← bash #4 dispatching 1 workers, at most 32 at a time no time left
  15m0s [lead] Time is up. Collecting results.
  15m0s [lead] → bash #5 {"command":"ls \"$RUN_DIR/results\" | wc -l","timeout":60}
  15m0s [lead] ← bash #5 158
+ 15m0s [lead] Done.
  15m0s [lead] finished; run directory: /tmp/out/A/run-5/run

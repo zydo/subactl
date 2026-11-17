@@ -1,16 +1,38 @@
+    0s [lead] I'll read the package list first.
+    0s [lead] → bash #1 {"command":"\"$TASK_DIR/list.sh\" | head -n \"${MAX_PACKAGES:-1000}\"","timeout":60}
+    0s [lead] ← bash #1 accessible-icon accordion alert-dialog announce arrow aspect-ratio avatar checkbox collapsible collection compose-refs context context-menu dialog direction dismissable-layer dropdown-menu focus-guard…
+  2m0s [lead] One worker per package, in parallel.
+  2m0s [lead] → bash #2 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
+  5m0s [lead] usage limit: killed subagent upgrade:tabs.d1 (pid 109978)
+  5m0s [lead] usage limit: killed subagent upgrade:toggle.d1 (pid 112237)
+  5m4s [lead] ← bash #2 dispatching 55 workers, at most 32 at a time { "code": 200, "name": "COMPLETED", "lease": "ls_a154ed68", "kind": "upgrade", "parent": "ls_a0ea3b47", "mem_basis": "working_set", "peak": 1922142208, "li…
+  5m4s [lead] ! llm: usage limit reached
+ 5m21s [lead] Some workers did not report back. Dispatching those again.
+ 5m21s [lead] → bash #3 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
+ 15m0s [lead] ← bash #3 dispatching 48 workers, at most 32 at a time { "code": 200, "name": "COMPLETED", "lease": "ls_8507ccec", "kind": "upgrade", "parent": "ls_a0ea3b47", "mem_basis": "working_set", "peak": 1895624704, "li…
+ 15m0s [lead] ⇢ [subactl events about your child agents since the last turn] ls_007f9ee9 TERMINATED ls_024555cf TERMINATED ls_0bba06ee DONE ls_0bba06ee TERMINATED ls_12a67b01 TERMINATED ls_1626b7c6 DONE ls_1626b7c6 T…
+ 15m0s [lead] Checking once more for packages without a result.
+ 15m0s [lead] → bash #4 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
+ 15m0s [lead] ← bash #4 dispatching 32 workers, at most 32 at a time no time left
+ 15m0s [lead] ⇢ [subactl events about your child agents since the last turn] ls_04cd590f DONE ls_04cd590f TERMINATED ls_0d2a4f4a DONE ls_0d2a4f4a TERMINATED ls_11579efc DONE ls_11579efc TERMINATED ls_1b21f775 TERMINA…
+ 15m0s [lead] Time is up. Collecting results.
+ 15m0s [lead] → bash #5 {"command":"ls \"$RUN_DIR/results\" | wc -l","timeout":60}
+ 15m0s [lead] ← bash #5 50
+ 15m0s [lead] Done.
+ 15m0s [lead] finished; run directory: /tmp/out/B/run-2/run
 {
   "code": 200,
   "name": "COMPLETED",
-  "lease": "ls_eb6e3874",
+  "lease": "ls_a0ea3b47",
   "kind": "lead",
   "mem_basis": "working_set",
-  "peak": 6450548736,
+  "peak": 7056998400,
   "limit": 9663676416,
   "enforcement": "hard",
   "evidence": {
     "exit_code": 0,
-    "reaped_pids": 27
+    "reaped_pids": 38
   },
-  "message": "lead ls_eb6e3874 completed: its main process exited with status 0.",
-  "at": "2026-11-17T00:18:23.59201993Z"
+  "message": "lead ls_a0ea3b47 completed: its main process exited with status 0.",
+  "at": "2026-11-17T14:44:28.800713525Z"
 }

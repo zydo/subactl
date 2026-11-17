@@ -1,0 +1,16 @@
+{
+  "code": 200,
+  "name": "COMPLETED",
+  "lease": "ls_c6d9c37e",
+  "kind": "lead",
+  "mem_basis": "working_set",
+  "peak": 8028594176,
+  "limit": 9663676416,
+  "enforcement": "hard",
+  "evidence": {
+    "exit_code": 0,
+    "reaped_pids": 31
+  },
+  "message": "lead ls_c6d9c37e completed: its main process exited with status 0.",
+  "at": "2026-11-17T01:55:06.974266505Z"
+}

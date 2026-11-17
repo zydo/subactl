@@ -54,7 +54,8 @@ docker run --rm --privileged \
       (cd "$r/run" && tar czf "/host/$r/agents.tgz" results $(cd work && ls -d */ | sed "s|^|work/|") \
         --exclude="*/shots" --exclude="*/chrome-profile-*" --exclude="work/runaway*/bash-*.out" 2>/dev/null) || true
     done
-    chmod -R a+rX /host
     # Group C keeps one audit log across all its runs.
-    if [ -d state/audit ]; then cp -r state/audit /host/audit; fi'
+    if [ -d state/audit ]; then cp -r state/audit /host/audit; fi
+    # The container runs as root; let the user who started it read it all.
+    chmod -R a+rX /host'
 echo "results are in $out"

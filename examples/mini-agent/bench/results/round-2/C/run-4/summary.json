@@ -1,0 +1,27 @@
+{
+  "group": "C",
+  "run": 4,
+  "scenario": "radix.yaml",
+  "chamber_bytes": 12884901888,
+  "mem_basis": "working_set",
+  "host_peak_ws": 7.692222595214844,
+  "host_oom": 0,
+  "oom_kills": 337,
+  "meltdown": false,
+  "orphans_after": 0,
+  "leaked_ws_after": 0.44321441650390625,
+  "completion": 0.2222222222222222,
+  "packages": 54,
+  "work_lost": 8,
+  "util_mean": 0.15032506725087663,
+  "safety_net_count": 0,
+  "makespan": 15.0029669707,
+  "lead_exit": 0,
+  "codes": {
+    "200": 30,
+    "413": 6,
+    "499": 3,
+    "502": 6,
+    "520": 48
+  }
+}
