@@ -1,0 +1,16 @@
+{
+  "code": 200,
+  "name": "COMPLETED",
+  "lease": "ls_3da319ec",
+  "kind": "lead",
+  "mem_basis": "working_set",
+  "peak": 6407278592,
+  "limit": 9663676416,
+  "enforcement": "hard",
+  "evidence": {
+    "exit_code": 0,
+    "reaped_pids": 23
+  },
+  "message": "lead ls_3da319ec completed: its main process exited with status 0.",
+  "at": "2026-11-17T00:50:34.032881379Z"
+}
