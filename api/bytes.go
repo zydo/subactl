@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -53,4 +54,18 @@ func FormatBytes(n int64) string {
 		return strconv.FormatInt(n, 10) + "B"
 	}
 	return strings.TrimSuffix(strings.TrimRight(strconv.FormatFloat(f, 'f', 2, 64), "0"), ".") + units[i]
+}
+
+// CheckSocketPath reports a Unix socket path the system cannot use because
+// it is too long: 103 bytes on macOS and the BSDs, 107 on Linux. Without
+// this check the failure surfaces as a bare "invalid argument".
+func CheckSocketPath(path string) error {
+	limit := 107
+	if runtime.GOOS != "linux" {
+		limit = 103
+	}
+	if len(path) > limit {
+		return fmt.Errorf("the socket path %s is %d bytes long; Unix sockets allow at most %d here: use a shorter path, for example /tmp/subactl.sock", path, len(path), limit)
+	}
+	return nil
 }

@@ -175,6 +175,9 @@ func run() error {
 	if err := os.MkdirAll(filepath.Dir(*socket), 0o755); err != nil {
 		return err
 	}
+	if err := api.CheckSocketPath(*socket); err != nil {
+		return err
+	}
 	// A socket file left by a dead daemon would make Listen fail.
 	if c, err := net.DialTimeout("unix", *socket, time.Second); err == nil {
 		c.Close()

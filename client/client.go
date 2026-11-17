@@ -45,6 +45,9 @@ type Client struct {
 func New(socket string) *Client {
 	tr := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			if err := api.CheckSocketPath(socket); err != nil {
+				return nil, err
+			}
 			var d net.Dialer
 			return d.DialContext(ctx, "unix", socket)
 		},

@@ -83,3 +83,16 @@ func TestParseBytes(t *testing.T) {
 		t.Errorf("FormatBytes = %q", got)
 	}
 }
+
+// A socket path the system cannot hold is reported as such, with the
+// limit, instead of the system's bare "invalid argument".
+func TestCheckSocketPath(t *testing.T) {
+	if err := api.CheckSocketPath("/tmp/subactl.sock"); err != nil {
+		t.Fatal(err)
+	}
+	long := "/tmp/" + strings.Repeat("x", 120) + ".sock"
+	err := api.CheckSocketPath(long)
+	if err == nil || !strings.Contains(err.Error(), "bytes long") {
+		t.Fatalf("a %d-byte path: %v", len(long), err)
+	}
+}
