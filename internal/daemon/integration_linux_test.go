@@ -98,6 +98,8 @@ type env struct {
 	outer   string
 	reserve int64
 	window  time.Duration
+	// tune, when set, adjusts the manager's configuration at every start.
+	tune func(*Config)
 
 	t    *testing.T
 	m    *Manager
@@ -171,6 +173,9 @@ func (e *env) start() {
 	cfg := Config{Backend: be, Capacity: 4 << 30, EscapeScan: 500 * time.Millisecond, TermWait: time.Second}
 	if e.outer != "" {
 		cfg.Capacity, cfg.Host, cfg.Reserve, cfg.SafetyWindow = 0, capacity.CgroupReader{Dir: e.outer}, e.reserve, e.window
+	}
+	if e.tune != nil {
+		e.tune(&cfg)
 	}
 	m, err := NewManager(ctx, cfg)
 	if err != nil {
@@ -986,4 +991,108 @@ func TestIntegrationF27MultiLeadIsolation(t *testing.T) {
 			t.Fatalf("the quiet lead was affected: %+v", ls)
 		}
 	}
+}
+
+// F10: one fault of each kind is injected into its own lease, and every
+// lease ends with exactly the code that names its fault. Accuracy must be
+// 100%: a planner reacts to these codes, and a wrong one sends it the
+// wrong way (more memory for a lease that was only unlucky, a retry of
+// one that cannot succeed).
+func TestIntegrationF10TerminationCodes(t *testing.T) {
+	needNode(t)
+	e := newEnvIn(t, 640*mib, 160*mib)
+	// Restart with the idle deadline short enough to wait for.
+	e.stop()
+	e.m.Shutdown()
+	e.tune = func(c *Config) { c.MaxIdleDone = time.Second }
+	e.start()
+	ctx := context.Background()
+	got := map[string]int{}
+	check := func(fault string, id api.LeaseID, want int, within time.Duration) {
+		t.Helper()
+		term := e.wait(id, within)
+		got[fault] = term.Code
+		if term.Code != want {
+			t.Errorf("%s: ended with %d %s, want %d %s (evidence %v)", fault, term.Code, term.Name, want, api.CodeName(want), term.Evidence)
+		}
+		// Exactly one code: asking again gives the same record.
+		if again, _ := e.m.waitReaped(ctx, id); again.Code != term.Code || !again.At.Equal(term.At) {
+			t.Errorf("%s: the record changed from %+v to %+v", fault, term, again)
+		}
+	}
+
+	check("completed", e.run(e.op, 32*mib, "exit 0"), api.CodeCompleted, 5*time.Second)
+
+	released := e.run(e.op, 32*mib, "exec sleep 600")
+	zero := 0.0
+	go e.m.Terminate(ctx, e.op, released, api.TerminateRequest{Code: api.CodeReleased, GraceSeconds: &zero})
+	check("released by its planner", released, api.CodeReleased, 15*time.Second)
+
+	check("over its memory limit", e.run(e.op, 32*mib, hog), api.CodeOOMLeaseLimit, 30*time.Second)
+
+	check("over its wall time", e.m.mustRun(t, e.op, api.Envelope{Memory: 32 * mib, Wall: 1}, "exec sleep 600"), api.CodeWallExceeded, 10*time.Second)
+
+	// Written output sits in the page cache, which counts against the
+	// lease's memory: the memory limit is set well clear of the output one,
+	// so that only the output limit is in play.
+	check("over its output limit", e.m.mustRun(t, e.op, api.Envelope{Memory: 128 * mib, Output: mib}, "while :; do head -c 65536 /dev/zero | tr '\\0' x; done"), api.CodeOutputExceeded, 10*time.Second)
+
+	escaper := e.run(e.op, 32*mib, "exec sleep 600")
+	main := e.m.runtime(escaper).proc.Pid()
+	if err := os.WriteFile("/sys/fs/cgroup/test-init/cgroup.procs", []byte(strconv.Itoa(main)), 0o644); err != nil {
+		if err = os.WriteFile("/sys/fs/cgroup/cgroup.procs", []byte(strconv.Itoa(main)), 0o644); err != nil {
+			t.Fatalf("cannot stage an escape: %v", err)
+		}
+	}
+	check("a process escaped", escaper, api.CodeEscapeDetected, 10*time.Second)
+
+	killed := e.run(e.op, 32*mib, "exec sleep 600")
+	go e.m.Kill(ctx, e.op, killed)
+	check("killed by its planner", killed, api.CodeKilled, 5*time.Second)
+
+	parent := e.run(e.op, 64*mib, "exec sleep 600")
+	orphan := e.run(node(parent), 32*mib, "exec sleep 600")
+	go e.m.Kill(ctx, e.op, parent)
+	check("its parent ended", orphan, api.CodeParentDied, 5*time.Second)
+
+	aborted := e.run(e.op, 32*mib, "exec sleep 600")
+	syscall.Kill(e.m.runtime(aborted).proc.Pid(), syscall.SIGKILL)
+	check("killed from outside", aborted, api.CodeExternalAbort, 5*time.Second)
+
+	idle := e.run(e.op, 32*mib, "exec sleep 600")
+	if err := e.m.Progress(node(idle), api.Self, api.ProgressRequest{State: "done"}); err != nil {
+		t.Fatal(err)
+	}
+	check("done but still alive", idle, api.CodeIdleReaped, 10*time.Second)
+
+	// Last, because it squeezes the whole machine: something outside every
+	// lease takes the memory, and the safety net ends the one lease there.
+	victim := e.run(e.op, 256*mib, hold(130*mib))
+	time.Sleep(3 * time.Second)
+	external := exec.Command("/bin/sh", "-c", hold(380*mib))
+	external.Env = []string{agentPath(), "SUBACTL_SCRATCH=/tmp"}
+	leaf, err := os.Open(filepath.Join(e.outer, "external"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer leaf.Close()
+	external.SysProcAttr = &syscall.SysProcAttr{UseCgroupFD: true, CgroupFD: int(leaf.Fd())}
+	if err := external.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer external.Process.Kill()
+	check("the machine ran short", victim, api.CodeSafetyNet, 40*time.Second)
+
+	t.Logf("%d faults injected, %d distinct codes: %v", len(got), len(uniq(got)), got)
+	if len(got) != 11 || len(uniq(got)) != 11 {
+		t.Errorf("want 11 faults with 11 distinct codes, got %v", got)
+	}
+}
+
+func uniq(m map[string]int) map[int]bool {
+	out := map[int]bool{}
+	for _, v := range m {
+		out[v] = true
+	}
+	return out
 }
