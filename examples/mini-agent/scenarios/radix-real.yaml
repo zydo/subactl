@@ -9,7 +9,10 @@ fanout: 8
 depth: 2
 max_packages: 8
 duration: 20m
-quota_at: 8m           # G4: the harness kills its subagents' pids, and nothing else
+# G4: the harness kills its subagents' pids, and nothing else. At 3m the
+# workers have started their dev servers and are testing: without subactl,
+# eight real workers finish all eight packages in about five minutes.
+quota_at: 3m
 quota_for: 20s
 envelopes:
   lead: 9G
