@@ -22,8 +22,8 @@ func TestRoutesMatchContract(t *testing.T) {
 		if _, dup := have[r.ID]; dup {
 			t.Errorf("duplicate route %s", r.ID)
 		}
-		if (r.handler == nil) == (r.Pending == "") {
-			t.Errorf("%s: a route has either a handler or a pending milestone", r)
+		if r.handler == nil {
+			t.Errorf("%s has no handler", r.ID)
 		}
 		have[r.ID] = r
 	}

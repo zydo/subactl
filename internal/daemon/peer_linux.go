@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"net"
+	"os"
 
 	"golang.org/x/sys/unix"
 )
@@ -51,5 +52,5 @@ func closeFD(fd int) { _ = unix.Close(fd) }
 // protectSelf makes the daemon the last thing the kernel's global OOM
 // killer would choose. The shim sets each agent's own, higher, score.
 func protectSelf() error {
-	return writeFile("/proc/self/oom_score_adj", "-1000")
+	return os.WriteFile("/proc/self/oom_score_adj", []byte("-1000"), 0o644)
 }

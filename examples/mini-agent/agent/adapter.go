@@ -85,9 +85,6 @@ func (ad *Adapter) AwaitingInput(ctx context.Context) {
 	_ = ad.c.Progress(ctx, api.Self, api.ProgressRequest{State: "awaiting_input", Turns: int64(ad.turns)})
 }
 
-// Terminating reports whether the lease was asked to end.
-func (ad *Adapter) Terminating() bool { return ad.terminate.Load() }
-
 // render shows a control message in a fixed template. The source is the
 // one subactld attached; the message's own text cannot change it.
 func render(m api.InboxMessage) string {

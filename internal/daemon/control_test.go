@@ -196,11 +196,11 @@ func TestIdleDetection(t *testing.T) {
 
 		// A build of twenty minutes sends no beacon. The planner hears of
 		// the silence at ten, once; nothing is reaped.
-		time.Sleep(began.Add(10*time.Minute + 10*time.Second).Sub(time.Now()))
+		time.Sleep(time.Until(began.Add(10*time.Minute + 10*time.Second)))
 		if a, b := count(eventStalled, building), 0; a != 1 {
 			t.Fatalf("%d STALLED events for the build at 10m (%d)", a, b)
 		}
-		time.Sleep(began.Add(20 * time.Minute).Sub(time.Now()))
+		time.Sleep(time.Until(began.Add(20 * time.Minute)))
 		if w.state(building) != api.StateRunning || w.state(silent) != api.StateRunning {
 			t.Fatal("a lease was reaped after only twenty silent minutes")
 		}

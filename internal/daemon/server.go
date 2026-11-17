@@ -26,9 +26,6 @@ type Route struct {
 	Method  string
 	Path    string
 	handler func(s *Server, w http.ResponseWriter, r *http.Request, c Caller) error
-	// Pending names the milestone that implements the route. Until then it
-	// answers 501.
-	Pending string
 }
 
 // Server is the HTTP face of a Manager.
@@ -76,10 +73,6 @@ func NewServer(m *Manager, identify IdentityFunc) *Server {
 			c, err := s.identify(r)
 			if err != nil {
 				writeErr(w, apiErr(http.StatusForbidden, api.ErrOutOfSubtree, "cannot establish the caller's identity: %v", err))
-				return
-			}
-			if rt.handler == nil {
-				writeErr(w, apiErr(http.StatusNotImplemented, api.ErrNotImplemented, "%s lands in milestone %s", rt.ID, rt.Pending))
 				return
 			}
 			if err := rt.handler(s, w, r, c); err != nil {

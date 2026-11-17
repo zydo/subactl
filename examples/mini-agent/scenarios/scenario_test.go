@@ -59,7 +59,8 @@ func TestFailsIsDeterministicAndBounded(t *testing.T) {
 	failed := 0
 	for i := range 200 {
 		pkg := "pkg" + strings.Repeat("x", i)
-		if sc.Fails(pkg, 1) != sc.Fails(pkg, 1) {
+		first, again := sc.Fails(pkg, 1), sc.Fails(pkg, 1)
+		if first != again {
 			t.Fatal("not deterministic")
 		}
 		if sc.Fails(pkg, 1) {

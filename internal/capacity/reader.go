@@ -84,13 +84,6 @@ func (r CgroupReader) Read() (Host, error) {
 	return Host{Total: total, Available: max(total-max(current-inactive, 0), 0)}, nil
 }
 
-// Static is a fixed reading, for backends and platforms where the host
-// cannot be read and for tests.
-type Static Host
-
-// Read returns the fixed reading.
-func (s Static) Read() (Host, error) { return Host(s), nil }
-
 // ReaderFunc adapts a function to a Reader.
 type ReaderFunc func() (Host, error)
 
