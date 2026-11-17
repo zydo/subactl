@@ -49,7 +49,12 @@ docker run --rm --privileged \
       if [ -f "$r/subactld.log" ]; then cp "$r/subactld.log" "/host/$r/"; fi
       # The audit log of the run (group B keeps one per run).
       if [ -d "$r/state/audit" ]; then cp -r "$r/state/audit" "/host/$r/audit"; fi
+      # What each agent did, to diagnose a run without running it again:
+      # the task results, transcripts and the logs of the checks.
+      (cd "$r/run" && tar czf "/host/$r/agents.tgz" results $(cd work && ls -d */ | sed "s|^|work/|") \
+        --exclude="*/shots" --exclude="*/chrome-profile-*" --exclude="work/runaway*/bash-*.out" 2>/dev/null) || true
     done
+    chmod -R a+rX /host
     # Group C keeps one audit log across all its runs.
     if [ -d state/audit ]; then cp -r state/audit /host/audit; fi'
 echo "results are in $out"

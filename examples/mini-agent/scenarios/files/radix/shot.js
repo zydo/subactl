@@ -17,9 +17,13 @@ const path = require('path');
     .map((e) => e.id)
     .slice(0, Number(process.env.MAX_STORIES || 6));
   fs.mkdirSync(out, { recursive: true });
-  // As root (in a container) Chromium cannot use its sandbox.
   log(`${ids.length} stories; launching the browser`);
-  const sandbox = process.getuid() === 0 ? ['--no-sandbox'] : [];
+  // Chromium's sandbox needs user namespaces, which a container on a host
+  // that restricts them (Ubuntu 24.04 and later) does not get: Chromium
+  // then exits at once with "No usable sandbox". Playwright's own launch
+  // turns the sandbox off for this reason; the detached browser below must
+  // do the same.
+  const sandbox = ['--no-sandbox'];
   let browser;
   if (keep === '1') {
     // G2: a browser the agent starts and then walks away from. It is its
@@ -37,12 +41,13 @@ const path = require('path');
         browser = await chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`, { timeout: 5000 });
         break;
       } catch (e) {
-        if (i >= 60) throw e;
+        if (i === 0) log(`waiting for the browser on port ${debugPort}`);
+        if (i >= 60) { log(`the browser never answered on port ${debugPort}`); throw e; }
         await new Promise((r) => setTimeout(r, 500));
       }
     }
   } else {
-    browser = await chromium.launch({ args: sandbox, timeout: 120000 });
+    browser = await chromium.launch({ timeout: 120000 });
   }
   let errors = 0, changed = 0;
   const messages = [];

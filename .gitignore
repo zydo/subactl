@@ -4,3 +4,4 @@
 .DS_Store
 go.work.sum
 /bin-linux/
+bin-linux-amd64/
