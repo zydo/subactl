@@ -37,7 +37,8 @@ const usage = `usage: subactl [--socket PATH] <command> [flags] [-- command...]
   kill LEASE                   kill the whole tree at once (499)
   wait-children [LEASE]        wait for the subtree to end (default: own lease)
   suggest KIND [--lease LEASE] suggested memory for a kind, in bytes: p95 of past peaks x 1.2
-  trace LEASE                  timeline of a lease: usage series, events, termination
+  trace LEASE [--tree]         timeline of a lease: usage, events, memory spikes, termination;
+                               --tree adds the whole subtree, ended leases too
   audit --lease LEASE          the same timeline, for a lease that ended long ago
   events                       follow the events you may see, one JSON object per line
   notify LEASE --type T        put a control message in a descendant's inbox

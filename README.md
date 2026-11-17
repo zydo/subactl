@@ -18,12 +18,13 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
 - **M2, Linux enforcement core: done.** The cgroup v2 backend, the pre-exec
   shim, nested leases, whole-group reaping, escape prevention and
   fail-closed restart. Integration tests named after the acceptance
-  criteria (F1-F4, F11-F14, F33) run with `make integration`.
+  criteria run on a real kernel with `make integration`: under sudo on
+  Linux, in a privileged Docker container elsewhere.
 - **M3, quota and observability: done.** Effective capacity that follows
   external load, the capacity-shrunk state, the safety net, NEAR_LIMIT,
   wall-time and output limits, the audit log, quota suggestions,
   Prometheus metrics and per-lease traces (F5-F11, F30, F32).
-- **M4, agent tree and communication: done** except where noted below.
+- **M4, agent tree and communication: done.**
   The lead's terminal and `subactl run -it`, mini-agent's self-wrapping
   and adapter, identity by cgroup membership, the inbox, graceful
   termination, declared policies, progress beacons, idle detection,

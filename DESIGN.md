@@ -579,7 +579,7 @@ mini-agent 是在 subactl 之上构建的最小 multi-agent harness，用来演�
 
 实现：G2 的浏览器由 agent 以独立进程启动后不再管理；G5 按约 5MB/s 的速率写，以便在没有输出上限时也能观察；G6 只作用于由 seed 决定的四分之一 worker：若所有 worker 都这样，四十个并发的类型检查需要的内存超过整个舱，任何配额都装不下。
 
-**剧本参数**（`scenario.yaml`）：seed、扇出上限、递归深度、每步泄漏量 X、故障注入时间点，以及每种贪婪行为的开关。实现：另有 `fail_rate`、`max_packages`、外部干扰的时间与比例、`greedy.unbounded_share`，以及在 subactl 下使用的 `envelopes`（各 kind 的固定配额）、`grow_factor` 和 `output_limit`。radix 场景的固定配额为 lead 9GiB、worker 3500MiB、fixer 1GiB、runaway 256MiB。
+**剧本参数**（`scenarios/*.yaml`）：seed、扇出上限、递归深度、每步泄漏量 X、故障注入时间点，以及每种贪婪行为的开关。实现：另有 `fail_rate`、`max_packages`、外部干扰的时间与比例、`greedy.unbounded_share`，以及在 subactl 下使用的 `envelopes`（各 kind 的固定配额）、`grow_factor` 和 `output_limit`。radix 场景的固定配额为 lead 9GiB、worker 3500MiB、fixer 1GiB、runaway 256MiB。
 
 **爆炸舱**：without 组的设计目标就是把机器压垮，所以每次运行都放在一个外层隔离单元里，用一个独立的 VM 或带硬上限的外层 cgroup（例如 16G）。实现：采用外层 cgroup，上限 12GiB，建在特权 Docker 容器里；B、C 两组的 subactld 在舱内运行，用 `--capacity-cgroup` 以舱的上限和用量为“整机”，预留线取舱的 15%。看门狗每 5 秒在舱内启动一个探测进程，60 秒无响应即判 meltdown。B、C 两组优先用 VM：subactld 的有效容量以 MemTotal 和 MemAvailable 为基准，放在外层 cgroup 里时这两个值反映的是整台宿主，而不是舱的上限。如果只能用外层 cgroup，subactld 需配置为以该 cgroup 的 memory.max 和 memory.current 作为容量基准。这样既保护开发机，又能在舱内采到完整数据。外层再配一个看门狗：舱内持续 60 秒无响应就强制终止，并把这次运行记为 meltdown。
 

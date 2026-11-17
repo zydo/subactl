@@ -530,7 +530,8 @@ func (b *Backend) RemoveScratch(lease api.LeaseID) error {
 	return os.RemoveAll(b.ScratchDir(lease))
 }
 
-// OutputBytes is the size of the lease's stdout and stderr files.
+// OutputBytes is how much the lease has written to stdout and stderr, as
+// read from its pipes; what passed the limit is counted but not kept.
 func (b *Backend) OutputBytes(_ context.Context, g backend.ACGroup) (int64, error) {
 	b.mu.Lock()
 	out := b.outputs[g.Ref().Lease]

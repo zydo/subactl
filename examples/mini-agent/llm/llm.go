@@ -1,5 +1,6 @@
 // Package llm defines the brain of mini-agent: one streaming call. The
-// scripted brain implements it directly; the Anthropic brain lands in M5.
+// scripted brain plays a scenario; Messages speaks the Anthropic Messages
+// API, to Anthropic itself or to a compatible endpoint.
 package llm
 
 import (

@@ -35,6 +35,9 @@ A refusal is JSON on stderr with a `reason`:
 | `mem_budget` | the machine has no unallocated room | same, or tell the user |
 | `capacity_shrunk` | other load took the room; nothing new is admitted | wait; do not retry in a loop |
 | `below_usage` | a limit cannot go below current use plus a margin | pick a higher value |
+| `below_allocated` | a limit cannot go below what its children already hold | end or shrink a child first |
+| `enforcement_unavailable` | you required hard enforcement (`--require-memory hard`) and this machine cannot give it | drop the requirement or tell the user |
+| `parent_not_running` | the lease you named as parent is not running | spawn from a running lease |
 
 ## Watch and steer
 
@@ -74,7 +77,7 @@ that stays alive is reaped after 60 seconds. Results go in files under
 | 451 | a process left its group and was caught | do not detach processes |
 | 502 | its parent ended | none; it went with the tree |
 | 503 | the machine ran short and it was chosen | retry later; not the task's fault |
-| 520 | killed from outside, or crashed | check the cause, then retry |
+| 520 | exited with an error, crashed, or was killed from outside | read its output and `exit_code` or `signal`, then retry |
 | 500, 504 | subactl itself failed | tell the user |
 
 If you get a message marked `[subactl control message ...] TERMINATE_REQUESTED`,
