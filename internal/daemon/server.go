@@ -64,7 +64,8 @@ func Routes() []Route {
 }
 
 // NewServer wires the routes. identify may be nil, in which case identity
-// comes from the peer credentials of the Unix socket (see ConnContext).
+// comes from the peer credentials of the Unix socket: set the server's
+// ConnContext method as http.Server.ConnContext.
 func NewServer(m *Manager, identify IdentityFunc) *Server {
 	s := &Server{m: m, identify: identify, mux: http.NewServeMux()}
 	if s.identify == nil {
@@ -94,40 +95,53 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.Serve
 type peerKey struct{}
 
 type peer struct {
-	pid, uid int
-	err      error
+	caller Caller
+	err    error
 }
 
-// ConnContext records the peer credentials of each Unix connection. Set it
-// as http.Server.ConnContext.
-func ConnContext(ctx context.Context, c net.Conn) context.Context {
+// ConnContext establishes, once per connection, who is at the other end.
+// Set it as http.Server.ConnContext.
+//
+// The peer's pid is mapped to the acgroup it is in. Between reading the
+// pid and looking it up, the process could exit and its pid be given to
+// another process in another acgroup. Where the kernel hands out a pidfd
+// of the peer (Linux 6.5), that is ruled out: the lookup only counts if
+// the original process is still alive after it.
+func (s *Server) ConnContext(ctx context.Context, c net.Conn) context.Context {
 	uc, ok := c.(*net.UnixConn)
 	if !ok {
 		return context.WithValue(ctx, peerKey{}, peer{err: errors.New("not a Unix socket connection")})
 	}
-	pid, uid, err := peerCred(uc)
-	return context.WithValue(ctx, peerKey{}, peer{pid, uid, err})
+	pid, uid, pidfd, err := peerCred(uc)
+	if err != nil {
+		return context.WithValue(ctx, peerKey{}, peer{err: err})
+	}
+	if pidfd >= 0 {
+		defer closeFD(pidfd)
+	}
+	caller := Caller{UID: uid, PID: pid}
+	ref, err := s.m.be.Identify(ctx, pid)
+	switch {
+	case pidfd >= 0 && exited(pidfd):
+		err = errors.New("the calling process exited before it could be identified")
+	case err == nil:
+		// A process inside an acgroup is that node.
+		caller.Lease = ref.Lease
+	case errors.Is(err, backend.ErrNotMember):
+		// Any other process is an operator. Root and members of the
+		// subactl-admin group may act on every lead.
+		caller.Admin, err = uid == 0 || inAdminGroup(uid), nil
+	}
+	return context.WithValue(ctx, peerKey{}, peer{caller, err})
 }
 
-// peerIdentity maps the connection's peer pid to the acgroup it is in. A
-// process inside an acgroup is that node; any other process is an operator.
-// Root and members of the subactl-admin group may act on every lead.
+// peerIdentity returns what ConnContext established for this connection.
 func (s *Server) peerIdentity(r *http.Request) (Caller, error) {
 	p, ok := r.Context().Value(peerKey{}).(peer)
 	if !ok {
 		return Caller{}, errors.New("no peer credentials on this connection")
 	}
-	if p.err != nil {
-		return Caller{}, p.err
-	}
-	ref, err := s.m.be.Identify(r.Context(), p.pid)
-	switch {
-	case err == nil:
-		return Caller{Lease: ref.Lease, UID: p.uid, PID: p.pid}, nil
-	case errors.Is(err, backend.ErrNotMember):
-		return Caller{UID: p.uid, Admin: p.uid == 0 || inAdminGroup(p.uid), PID: p.pid}, nil
-	}
-	return Caller{}, err
+	return p.caller, p.err
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

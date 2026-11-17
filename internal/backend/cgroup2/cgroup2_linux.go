@@ -105,6 +105,13 @@ func New(cfg Config) (*Backend, error) {
 		Membership: hard, Memory: hard, CPU: hard, Pids: hard, KillTree: hard,
 		ParentDeath: hard, EscapePrevention: hard, CallerIdentity: hard,
 	}
+	// Under a systemd service with Delegate=yes, the base is below the
+	// daemon's own cgroup, which holds the daemon. A cgroup that holds
+	// processes cannot hand controllers down, so the daemon first moves
+	// itself into a leaf of its own.
+	if err := moveSelfAside(cfg.Base); err != nil {
+		return nil, err
+	}
 	// Delegation runs from the root down: a cgroup can only pass on what
 	// its own parent passed to it.
 	var chain []string
@@ -129,6 +136,39 @@ func New(cfg Config) (*Backend, error) {
 		return nil, fmt.Errorf("cgroup2: %w", err)
 	}
 	return b, nil
+}
+
+// moveSelfAside moves the daemon into <own cgroup>/_daemon when base lies
+// below its own cgroup. It does nothing otherwise.
+func moveSelfAside(base string) error {
+	data, err := os.ReadFile("/proc/self/cgroup")
+	if err != nil {
+		return fmt.Errorf("cgroup2: %w", err)
+	}
+	rel, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "0::")
+	if !ok || rel == "/" {
+		return nil
+	}
+	own := filepath.Join(cgroupRoot, rel)
+	if r, err := filepath.Rel(own, base); err != nil || r == "." || strings.HasPrefix(r, "..") {
+		return nil
+	}
+	leaf := filepath.Join(own, "_daemon")
+	if err := os.MkdirAll(leaf, 0o755); err != nil {
+		return fmt.Errorf("cgroup2: %w", err)
+	}
+	// Every process of the service goes, not only this one: a process left
+	// behind would keep the controllers from being handed down.
+	procs, err := os.ReadFile(filepath.Join(own, "cgroup.procs"))
+	if err != nil {
+		return fmt.Errorf("cgroup2: %w", err)
+	}
+	for _, pid := range strings.Fields(string(procs)) {
+		if err := write(filepath.Join(leaf, "cgroup.procs"), pid); err != nil && !errors.Is(err, syscall.ESRCH) {
+			return fmt.Errorf("cgroup2: move process %s out of %s: %w", pid, own, err)
+		}
+	}
+	return nil
 }
 
 // delegate enables the controllers for the children of dir.

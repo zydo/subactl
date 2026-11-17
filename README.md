@@ -94,6 +94,21 @@ examples/mini-agent/bench/chamber/run.sh A examples/mini-agent/scenarios/radix.y
 bin/bench report --in /tmp/bench
 ```
 
+## Install as a service (Linux)
+
+```sh
+sudo install -m 0755 bin/subactld bin/subactl /usr/local/bin/
+sudo groupadd --system subactl          # who may start agents
+sudo groupadd --system subactl-admin    # who may act on every lead
+sudo install -m 0644 deploy/subactld.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now subactld
+```
+
+The unit restarts the daemon at once if it dies and gives it an OOM score
+of -1000. Its leases live in the service's delegated cgroup, so when the
+daemon dies systemd reaps them together with it: nothing an agent started
+outlives the daemon, whether or not it comes back.
+
 ## Develop
 
 ```sh

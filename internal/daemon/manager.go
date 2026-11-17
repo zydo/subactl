@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"regexp"
 	"sync"
 	"sync/atomic"
@@ -978,3 +979,10 @@ func (m *Manager) Shutdown() {
 		m.reap(id, api.CodeSubactlInternal, map[string]any{"step": "daemon_shutdown"})
 	}
 }
+
+// ProtectSelf lowers the daemon's own OOM score as far as it goes, so that
+// under a machine-wide shortage the kernel takes anything else first. It
+// needs root; elsewhere it fails and the caller decides what to make of it.
+func ProtectSelf() error { return protectSelf() }
+
+func writeFile(path, value string) error { return os.WriteFile(path, []byte(value), 0o644) }

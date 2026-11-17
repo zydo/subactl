@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -40,6 +41,24 @@ func main() {
 	}
 }
 
+// defaultCgroupBase puts the leases below the daemon's own cgroup when the
+// daemon runs as a systemd service with Delegate=yes, where that subtree
+// is its to manage; otherwise directly below the root.
+func defaultCgroupBase() string {
+	if goruntime.GOOS != "linux" || os.Getenv("INVOCATION_ID") == "" {
+		return "/sys/fs/cgroup/subactl"
+	}
+	data, err := os.ReadFile("/proc/self/cgroup")
+	if err != nil {
+		return "/sys/fs/cgroup/subactl"
+	}
+	own, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "0::")
+	if !ok || own == "/" {
+		return "/sys/fs/cgroup/subactl"
+	}
+	return filepath.Join("/sys/fs/cgroup", own, "leases")
+}
+
 // defaultBackend is the real backend of the platform.
 func defaultBackend() string {
 	if goruntime.GOOS == "darwin" {
@@ -60,7 +79,7 @@ func run() error {
 	backendName := flag.String("backend", defaultBackend(), "enforcement backend: cgroup2 (Linux), darwin (macOS, monitoring only) or fake")
 	capacityFlag := flag.String("capacity", "", "cap on the effective capacity, e.g. 24G (default: total memory minus the reserve)")
 	reserveFlag := flag.String("reserve", "", "memory kept for the system, e.g. 8G (default: the larger of 15% and 8G)")
-	cgroupBase := flag.String("cgroup", "/sys/fs/cgroup/subactl", "cgroup under which every lease lives (cgroup2 backend)")
+	cgroupBase := flag.String("cgroup", defaultCgroupBase(), "cgroup under which every lease lives (cgroup2 backend)")
 	socketGroup := flag.String("socket-group", "subactl", "group that may connect to the socket")
 	capacityCgroup := flag.String("capacity-cgroup", "", "treat this cgroup's memory.max and usage as the machine, for a daemon inside a capped cgroup")
 	stateDir := flag.String("state", envOr("SUBACTL_STATE", "/var/lib/subactl"), "state directory: scratch directories and, later, the audit log")
@@ -179,7 +198,13 @@ func run() error {
 		return err
 	}
 
-	srv := &http.Server{Handler: daemon.NewServer(m, nil), ConnContext: daemon.ConnContext}
+	server := daemon.NewServer(m, nil)
+	srv := &http.Server{Handler: server, ConnContext: server.ConnContext}
+	if os.Geteuid() == 0 {
+		if err := daemon.ProtectSelf(); err != nil {
+			log.Warn("could not lower the daemon's own OOM score", "err", err)
+		}
+	}
 	log.Info("subactld listening", "socket", *socket, "backend", be.Name(),
 		"effective_capacity", api.FormatBytes(m.Host().EffectiveCapacity), "reserve", api.FormatBytes(reserve))
 	errc := make(chan error, 1)

@@ -41,7 +41,8 @@ func daemonOnSocket(t *testing.T) (socket string, f *backend.Fake) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := &http.Server{Handler: daemon.NewServer(m, nil), ConnContext: daemon.ConnContext}
+	server := daemon.NewServer(m, nil)
+	srv := &http.Server{Handler: server, ConnContext: server.ConnContext}
 	go srv.Serve(ln)
 	t.Cleanup(func() { srv.Close() })
 	return socket, f

@@ -1,0 +1,33 @@
+# systemd unit for subactld. Install:
+#   sudo install -m 0755 bin/subactld bin/subactl /usr/local/bin/
+#   sudo groupadd --system subactl            # users who may start agents
+#   sudo groupadd --system subactl-admin      # users who may act on every lead
+#   sudo install -m 0644 deploy/subactld.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now subactld
+#
+# subactld is fail-closed: if it dies, the next one kills every lease the
+# old one left running. Restart=always keeps that gap short.
+[Unit]
+Description=subactl: subagent resource controller
+Documentation=https://github.com/zydo/subactl
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/subactld --socket /run/subactl/subactl.sock --socket-group subactl --state /var/lib/subactl
+Restart=always
+RestartSec=1
+# The daemon must outlive every agent: the kernel's OOM killer leaves it to
+# last. It also sets this itself, for when it is not started by systemd.
+OOMScoreAdjust=-1000
+# It manages cgroups below its own; systemd must leave them alone.
+Delegate=yes
+# Stopping the daemon reaps every lease, which takes a moment.
+KillMode=mixed
+TimeoutStopSec=30
+RuntimeDirectory=subactl
+RuntimeDirectoryMode=0755
+StateDirectory=subactl
+
+[Install]
+WantedBy=multi-user.target
