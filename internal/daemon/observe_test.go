@@ -573,3 +573,33 @@ func TestSpikesAttributeGrowthToToolCalls(t *testing.T) {
 		t.Fatal("spikes without beacons or samples")
 	}
 }
+
+// A lease ended for its memory names the processes that used it: from
+// the last sample near the limit when the kernel has already killed them,
+// as it has here (the fake lists nothing once the group is gone).
+func TestTopProcsInEvidence(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w := newWorld(t, nil)
+		id := w.lease(operator, mem(gib), 950<<20) // past 90%: near the limit
+		procs := []api.Proc{{Pid: 7, Name: "chrome", Memory: 600 << 20}, {Pid: 8, Name: "node", Memory: 300 << 20}}
+		w.f.SetProcs(id, procs)
+		w.next(telemetry.EventNearLimit, 3*time.Second)
+		time.Sleep(2 * time.Second) // another sample near the limit
+		w.f.SetProcs(id, nil)       // the kernel's group kill
+		w.f.OOM(id)
+		term, _ := w.m.waitReaped(ctx, id)
+		got, _ := term.Evidence["top_procs"].([]api.Proc)
+		if term.Code != api.CodeOOMLeaseLimit || len(got) != 2 || got[0].Name != "chrome" {
+			t.Fatalf("termination %d with evidence %+v", term.Code, term.Evidence)
+		}
+		// A lease that is still running when it is ended is listed as it is.
+		id = w.lease(operator, mem(gib), 10<<20)
+		w.f.SetProcs(id, []api.Proc{{Pid: 9, Name: "sleep", Memory: 1 << 20}})
+		go w.m.Kill(ctx, operator, id)
+		term, _ = w.m.waitReaped(ctx, id)
+		if got, _ := term.Evidence["top_procs"].([]api.Proc); len(got) != 1 || got[0].Name != "sleep" {
+			t.Fatalf("evidence %+v", term.Evidence)
+		}
+		w.end()
+	})
+}

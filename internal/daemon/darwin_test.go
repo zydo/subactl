@@ -296,3 +296,28 @@ func TestDarwinLeadTerminal(t *testing.T) {
 	}
 	_ = filepath.Join
 }
+
+// The macOS backend lists a lease's processes by footprint, and a lease
+// ended for its memory names them in its evidence.
+func TestDarwinTopProcs(t *testing.T) {
+	e := newDarwinEnv(t)
+	id := e.run(e.op, api.Envelope{Memory: 1 << 30}, "exec sleep 31")
+	var top []api.Proc
+	soon(t, 5*time.Second, "the sleep is listed", func() bool {
+		top, _ = e.be.TopProcs(context.Background(), e.m.runtime(id).group, 3)
+		return len(top) == 1 && top[0].Name == "sleep" // after the shell's exec
+	})
+	if top[0].Memory <= 0 {
+		t.Fatalf("top processes %+v", top)
+	}
+	go e.m.Kill(context.Background(), e.op, id)
+	e.wait(id, 5*time.Second)
+
+	// Over its limit: the sampler ends it, and names the process.
+	id = e.run(e.op, api.Envelope{Memory: 48 * dmib}, `exec perl -e '$x = "x" x (200*1024*1024); sleep 30'`)
+	term := e.wait(id, 15*time.Second)
+	got, _ := term.Evidence["top_procs"].([]api.Proc)
+	if term.Code != api.CodeOOMLeaseLimit || len(got) == 0 || got[0].Name != "perl" {
+		t.Fatalf("ended with %d, evidence %+v", term.Code, term.Evidence)
+	}
+}

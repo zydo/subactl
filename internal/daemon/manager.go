@@ -578,6 +578,7 @@ func (m *Manager) reap(id api.LeaseID, code int, evidence map[string]any) {
 			peaks[mk.ID] = u
 		}
 	}
+	top := m.topProcs(ctx, id, root.group)
 	rep, killErr := m.be.KillTree(ctx, root.group)
 	for _, mk := range marked { // children before parents
 		rt := m.runtime(mk.ID)
@@ -596,6 +597,9 @@ func (m *Manager) reap(id api.LeaseID, code int, evidence map[string]any) {
 				ev[k] = v
 			}
 			ev["reaped_pids"] = rep.Killed
+			if len(top) > 0 {
+				ev["top_procs"] = top
+			}
 			if killErr != nil || rep.Remaining > 0 {
 				final = api.CodeReapIncomplete
 				ev["remaining_pids"], ev["intended_code"] = rep.Remaining, mk.Code
@@ -632,6 +636,26 @@ func (m *Manager) reap(id api.LeaseID, code int, evidence map[string]any) {
 		close(rt.done)
 		m.log.Info("lease reaped", "lease", mk.ID, "code", final, "name", term.Name)
 	}
+}
+
+// topProcs lists the processes using the most memory in a lease about to
+// be reaped. Those still running are listed as they are; when there are
+// none, because the kernel has already ended them for their memory, the
+// list taken at the last sample near the limit stands in, if it is recent.
+func (m *Manager) topProcs(ctx context.Context, id api.LeaseID, g backend.ACGroup) []api.Proc {
+	lister, ok := m.be.(backend.ProcLister)
+	if !ok {
+		return nil
+	}
+	if top, err := lister.TopProcs(ctx, g, topProcs); err == nil && len(top) > 0 {
+		return top
+	}
+	m.obs.mu.Lock()
+	defer m.obs.mu.Unlock()
+	if l := m.obs.leases[id]; l != nil && time.Since(l.topAt) < 10*time.Second {
+		return l.top
+	}
+	return nil
 }
 
 func (m *Manager) record(ls api.Lease, code int, u api.Usage, ev map[string]any) api.Termination {

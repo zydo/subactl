@@ -43,6 +43,7 @@ type fakeGroup struct {
 	ooms     int64 // times its own limit was hit
 	output   int64 // bytes of stdout and stderr
 	peak     int64
+	procs    []api.Proc // what TopProcs reports
 	children map[api.LeaseID]bool
 }
 
@@ -452,4 +453,24 @@ func (f *Fake) Slave(lease api.LeaseID) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.must(lease).main.slave
+}
+
+// SetProcs sets what TopProcs reports for the lease.
+func (f *Fake) SetProcs(id api.LeaseID, procs []api.Proc) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if fg := f.groups[id]; fg != nil {
+		fg.procs = procs
+	}
+}
+
+// TopProcs returns what SetProcs set, at most n.
+func (f *Fake) TopProcs(_ context.Context, g ACGroup, n int) ([]api.Proc, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fg, err := f.group(g)
+	if err != nil {
+		return nil, err
+	}
+	return append([]api.Proc{}, fg.procs[:min(n, len(fg.procs))]...), nil
 }

@@ -1317,3 +1317,17 @@ exec awk 'BEGIN { s = "x"; while (length(s) < 200000000) s = s s; system("sleep 
 		}
 	}
 }
+
+// A lease the kernel ends for its memory names the process that used it,
+// although that process is gone by the time the daemon reaps the lease.
+func TestIntegrationTopProcsAfterOOM(t *testing.T) {
+	e := newEnv(t)
+	// About 20MiB a second, so that samples see it near the limit.
+	id := e.run(e.op, 128*mib, `exec awk 'BEGIN { while (1) { s = s sprintf("%1000000s", ""); system("sleep 0.05") } }'`)
+	term := e.wait(id, 30*time.Second)
+	top, _ := term.Evidence["top_procs"].([]api.Proc)
+	t.Logf("evidence: %+v", term.Evidence)
+	if term.Code != api.CodeOOMLeaseLimit || len(top) == 0 || top[0].Name != "awk" || top[0].Memory < 64*mib {
+		t.Fatalf("ended with %d, top processes %+v", term.Code, top)
+	}
+}

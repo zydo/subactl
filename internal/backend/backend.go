@@ -67,6 +67,12 @@ type TTYProc interface {
 	TTY() *os.File
 }
 
+// ProcLister is implemented by backends that can list the processes of an
+// acgroup and of those nested in it, largest memory first, at most n.
+type ProcLister interface {
+	TopProcs(ctx context.Context, g ACGroup, n int) ([]api.Proc, error)
+}
+
 // OutputMeter is implemented by backends that capture a lease's stdout and
 // stderr and can say how much was written.
 type OutputMeter interface {

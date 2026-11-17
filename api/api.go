@@ -437,3 +437,13 @@ func init() {
 	Schemas["Trace"] = Trace{}
 	Schemas["Spike"] = Spike{}
 }
+
+// Proc is one process of a lease, as listed in the evidence of a
+// termination under "top_procs": the processes using the most memory
+// shortly before the end. Memory is the process's resident set on Linux
+// and its physical footprint on macOS.
+type Proc struct {
+	Pid    int    `json:"pid"`
+	Name   string `json:"name"`
+	Memory int64  `json:"memory"`
+}

@@ -23,6 +23,7 @@ const (
 	maxEvents     = 500  // events kept per lease for its trace
 	keptTraces    = 1024 // traces of reaped leases kept in memory
 	rearmFraction = 0.85 // NEAR_LIMIT re-arms once usage falls below this share
+	topProcs      = 3    // processes listed in a termination's evidence
 )
 
 // leaseObs is what is observed about one lease. It is kept apart from the
@@ -34,6 +35,11 @@ type leaseObs struct {
 	near   bool // NEAR_LIMIT was sent and has not re-armed
 	ticks  int
 	term   *api.Termination
+	// top are the processes using the most memory at the last sample that
+	// was near the limit: by the time the kernel ends a lease for its
+	// memory, they are gone and can no longer be listed.
+	top   []api.Proc
+	topAt time.Time
 }
 
 // observer is the manager's observation state.
@@ -256,7 +262,17 @@ func (m *Manager) observeSample(ctx context.Context, ls api.Lease, u api.Usage) 
 	case l.near && float64(u.Memory) < rearmFraction*float64(limit):
 		l.near = false
 	}
+	near := l.near
 	o.mu.Unlock()
+	if lister, ok := m.be.(backend.ProcLister); ok && near {
+		if rt := m.runtime(ls.ID); rt != nil {
+			if top, err := lister.TopProcs(ctx, rt.group, topProcs); err == nil && len(top) > 0 {
+				o.mu.Lock()
+				l.top, l.topAt = top, time.Now()
+				o.mu.Unlock()
+			}
+		}
+	}
 	if toAudit {
 		m.auditLease(audit.TypeSample, ls, func(r *audit.Record) { r.Usage = &u })
 	}

@@ -394,7 +394,7 @@ subactl spawn --wait --kind worker --memory "$(subactl suggest worker)" --wall 3
 }
 ```
 
-实现：大小一律是字节整数；另有 `at`（结束时间）。message 由模板生成，为英文；evidence 中目前没有 `top_procs`，有 `reaped_pids`（回收的进程数）、`exit_code`、`signal`、`step`（优雅终止停在哪一步）等。实际收不干净（kill 后仍有进程，或 cgroup 删不掉）时记 504，原本的终止码记在 evidence 的 `intended_code`。
+实现：大小一律是字节整数；另有 `at`（结束时间）。message 由模板生成，为英文；evidence 中有 `top_procs`（占内存最多的 3 个进程：pid、名称、内存；Linux 为常驻集，macOS 为 phys\_footprint）、`reaped_pids`（回收的进程数）、`exit_code`、`signal`、`step`（优雅终止停在哪一步）等。内核按硬限整组杀掉进程之后已无从列出，所以 lease 用量越过 90% 后每次采样都记一份，结束时若进程已不在，就用最近 10 秒内的那一份。实际收不干净（kill 后仍有进程，或 cgroup 删不掉）时记 504，原本的终止码记在 evidence 的 `intended_code`。
 
 **归因必须准确**。下面四种情况，planner 的正确反应完全不同；subactld 依据触限事件、兜底终止记录、退出信号以及信号是否由 subactld 发出来区分它们：
 
@@ -804,6 +804,7 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 
 **终止码与归因**
 - 非零退出记 520（退出码 0 才记 200）；内存撞限按 `oom_group_kill` 归到撞限的那一层。
+- evidence 的 `top_procs` 在接近上限时预先采集，因为内核杀掉进程后已无从列出。
 - fail-closed 清理的 acgroup 不产生终止记录；daemon 被正常停止时以 500 回收全部 lease；回收不干净记 504。
 
 **安全与部署**

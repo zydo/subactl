@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
+	"sort"
 	"sync"
 	"syscall"
 	"time"
@@ -512,4 +513,31 @@ func (b *Backend) WatchHolder(ctx context.Context, pid int) (<-chan struct{}, er
 		}
 	}()
 	return gone, nil
+}
+
+// TopProcs lists the members of the acgroup and of those nested in it,
+// largest physical footprint first, at most n.
+func (b *Backend) TopProcs(_ context.Context, g backend.ACGroup, n int) ([]api.Proc, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	own, err := b.group(g)
+	if err != nil {
+		return nil, err
+	}
+	var out []api.Proc
+	for _, sub := range b.subtreeLocked(own) {
+		for pid := range sub.pids {
+			mem, _, ok := rusage(pid)
+			if !ok {
+				continue
+			}
+			name := ""
+			if kp, err := unix.SysctlKinfoProc("kern.proc.pid", pid); err == nil {
+				name = unix.ByteSliceToString(kp.Proc.P_comm[:])
+			}
+			out = append(out, api.Proc{Pid: pid, Name: name, Memory: mem})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Memory > out[j].Memory })
+	return out[:min(n, len(out))], nil
 }

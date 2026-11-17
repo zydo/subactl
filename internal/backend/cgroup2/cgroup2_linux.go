@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -793,4 +794,39 @@ func ShimMain(args []string) error {
 		return fmt.Errorf("shim: %w", err)
 	}
 	return syscall.Exec(path, argv, os.Environ())
+}
+
+// TopProcs lists the processes of the acgroup and of those nested in it,
+// largest resident set first, at most n.
+func (b *Backend) TopProcs(_ context.Context, g backend.ACGroup, n int) ([]api.Proc, error) {
+	dir, err := b.dir(g)
+	if err != nil {
+		return nil, err
+	}
+	var out []api.Proc
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || d.Name() != "cgroup.procs" {
+			return nil
+		}
+		data, _ := os.ReadFile(path)
+		for _, f := range strings.Fields(string(data)) {
+			pid, _ := strconv.Atoi(f)
+			comm, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+			if err != nil {
+				continue // gone meanwhile
+			}
+			status, _ := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+			var rss int64
+			for _, line := range strings.Split(string(status), "\n") {
+				if v, ok := strings.CutPrefix(line, "VmRSS:"); ok {
+					kb, _ := strconv.ParseInt(strings.TrimSuffix(strings.TrimSpace(v), " kB"), 10, 64)
+					rss = kb << 10
+				}
+			}
+			out = append(out, api.Proc{Pid: pid, Name: strings.TrimSpace(string(comm)), Memory: rss})
+		}
+		return nil
+	})
+	sort.Slice(out, func(i, j int) bool { return out[i].Memory > out[j].Memory })
+	return out[:min(n, len(out))], nil
 }
