@@ -98,7 +98,10 @@ env:
 
 // The workers start their servers about 2s in and keep them through a 4s
 // verification step; the limit hits at 4s, in the middle of that window
-// with two seconds to spare on either side for a slow machine.
+// with two seconds to spare on either side for a slow machine. The lead
+// dispatches the killed packages again after the limit, at 5s, and each
+// takes about 6s more; the run lasts 18s so that a loaded machine, running
+// the rest of the suite beside it, still sees them complete.
 //
 // G4, the defect the design sets out to contain: at the usage limit the
 // harness kills each subagent's pid and nothing else, so the dev servers
@@ -110,7 +113,7 @@ seed: 7
 task: toy
 fanout: 6
 depth: 1
-duration: 13s
+duration: 18s
 fanout_at: 500ms
 quota_at: 4s
 quota_for: 1s
