@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,7 +55,11 @@ type Agent struct {
 	steer    []string
 	messages []llm.Message
 	toolSeq  int
+	tokens   int64
 }
+
+// Tokens is what the brain reported using so far. It is self-reported.
+func (a *Agent) Tokens() int64 { return a.tokens }
 
 // Steer queues a message that is injected after the current turn's tool
 // calls, as a user message.
@@ -92,8 +97,9 @@ func (a *Agent) Run(ctx context.Context, prompt string) error {
 	}
 	a.messages = append(a.messages, userText(prompt))
 	for turn := 1; ; turn++ {
-		msg, err := a.Brain.Stream(ctx, llm.Request{System: a.System, Messages: a.messages, Tools: specs},
-			func(s string) { a.emit(Event{Kind: EventText, Text: s}) })
+		// Line mode shows a message's text when it is complete, not as it
+		// streams.
+		msg, err := a.Brain.Stream(ctx, llm.Request{System: a.System, Messages: a.messages, Tools: specs}, nil)
 		if errors.Is(err, llm.ErrQuota) {
 			a.emit(Event{Kind: EventQuota, Text: err.Error(), IsError: true})
 			if a.OnQuota != nil {
@@ -113,6 +119,12 @@ func (a *Agent) Run(ctx context.Context, prompt string) error {
 			return err
 		}
 		a.messages = append(a.messages, msg)
+		a.tokens += msg.Tokens
+		for _, b := range msg.Blocks {
+			if b.Type == llm.BlockText && strings.TrimSpace(b.Text) != "" {
+				a.emit(Event{Kind: EventText, Text: strings.TrimSpace(b.Text)})
+			}
+		}
 		calls := msg.ToolCalls()
 		if len(calls) == 0 {
 			return nil

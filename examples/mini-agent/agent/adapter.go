@@ -50,7 +50,7 @@ func (ad *Adapter) Attach(ctx context.Context, a *Agent, self api.LeaseID) {
 	}
 	a.AfterTurn = func(ctx context.Context, turn int) {
 		ad.turns = turn
-		_ = ad.c.Progress(ctx, api.Self, api.ProgressRequest{State: "working", Turns: int64(turn)})
+		_ = ad.c.Progress(ctx, api.Self, api.ProgressRequest{State: "working", Turns: int64(turn), Tokens: a.Tokens()})
 		if s := ad.summary(); s != "" {
 			a.Steer(s)
 		}
@@ -77,6 +77,12 @@ func (ad *Adapter) Attach(ctx context.Context, a *Agent, self api.LeaseID) {
 			return nil
 		})
 	}()
+}
+
+// AwaitingInput tells subactl that the agent is waiting for a person, which
+// is not idleness.
+func (ad *Adapter) AwaitingInput(ctx context.Context) {
+	_ = ad.c.Progress(ctx, api.Self, api.ProgressRequest{State: "awaiting_input", Turns: int64(ad.turns)})
 }
 
 // Terminating reports whether the lease was asked to end.
