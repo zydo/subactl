@@ -27,10 +27,17 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
   and adapter, identity by cgroup membership, the inbox, graceful
   termination, declared policies, progress beacons, idle detection,
   `subactl top`, and the skill in [skill/subactl.md](skill/subactl.md).
-- **M5, experiments: running.** Groups B and C run under subactl in the
-  same chamber; `bench report` judges the four hypotheses from the data.
-- Not done: the macOS monitor and Windows backends (M6), the real-brain
-  demo, and an automated test of multi-lead CPU fairness (F27).
+- **M5, experiments: done.** Three groups, five runs each, on the radix
+  upgrade task: without subactl every run leaves processes behind and hits
+  the memory cap; with it none does. Two of the four hypotheses hold, one
+  holds without having been put under strain, one is refuted. See
+  [the results](examples/mini-agent/bench/results/README.md).
+- **The real brain** speaks the Anthropic Messages API over `net/http` and
+  has been run against DeepSeek and Z.AI through their compatible
+  endpoints, on its own and as a lead with child agents under subactl.
+  Against Anthropic's own API it is tested with recorded streams only.
+- Not done: the macOS monitor and Windows backends (M6), and an automated
+  test of CPU fairness between leads (F27).
 
 ## Try it
 
@@ -61,6 +68,10 @@ bin/mini-agent --mode without --scenario examples/mini-agent/scenarios/toy.yaml
 sudo bin/subactld --socket-group "$(id -gn)" &
 bin/mini-agent --mode with --scenario examples/mini-agent/scenarios/toy.yaml
 bin/subactl top
+
+# With a real model instead of the script. The key is read from the
+# environment: DEEPSEEK_API_KEY, ZAI_API_KEY or ANTHROPIC_API_KEY.
+bin/mini-agent --mode with --brain real --provider deepseek --prompt "..."
 
 # Group A on the real task (radix-ui/primitives to React 19), five runs,
 # in a Docker chamber capped at 12G. Needs Docker; the first run prepares
