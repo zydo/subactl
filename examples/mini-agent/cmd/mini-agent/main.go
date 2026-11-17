@@ -482,12 +482,7 @@ func wrap(sc *scenarios.Scenario, self, task string, depth int, reg agent.Regist
 	if task == "" {
 		return 0, errors.New("inside a lease a mini-agent needs --task")
 	}
-	// A scripted task is "kind:package". A real brain's task is free text,
-	// and its children are all workers.
-	kind, _, scripted := strings.Cut(task, ":")
-	if !scripted || strings.ContainsAny(kind, " \t") {
-		kind = "worker"
-	}
+	kind := taskKind(task)
 	ns, _ := strconv.ParseInt(os.Getenv(envT0), 10, 64)
 	deadline := time.Unix(0, ns).Add(sc.Duration)
 	for attempt := 0; ; attempt++ {
@@ -626,4 +621,15 @@ func (t *turnControl) interrupt() bool {
 	t.cancel()
 	t.cancel = nil
 	return true
+}
+
+// taskKind is the kind of agent a task makes. A scripted task is
+// "kind:package", or a kind alone ("runaway"). A real brain's task is free
+// text, and its children are all workers.
+func taskKind(task string) string {
+	kind, _, _ := strings.Cut(task, ":")
+	if kind == "" || strings.ContainsAny(kind, " \t\n") {
+		return "worker"
+	}
+	return kind
 }

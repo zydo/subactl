@@ -194,3 +194,20 @@ func (l *lockedOutput) String() string {
 	defer l.mu.Unlock()
 	return l.b.String()
 }
+
+// The kind decides the envelope a scenario gives: the G5 worker, whose
+// task has no package, is a "runaway" with the scenario's small limit, not
+// a generic worker with the default one.
+func TestTaskKind(t *testing.T) {
+	for task, want := range map[string]string{
+		"upgrade:dialog":                      "upgrade",
+		"fix:slot":                            "fix",
+		"runaway":                             "runaway",
+		"Fix the tests of the dialog package": "worker",
+		"":                                    "worker",
+	} {
+		if got := taskKind(task); got != want {
+			t.Errorf("taskKind(%q) = %q, want %q", task, got, want)
+		}
+	}
+}
