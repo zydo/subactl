@@ -1,0 +1,51 @@
+# Group L: the radix scenario of groups B and C, with a model as the
+# planner. The lead is a real brain that decides how much memory each
+# worker gets and how many run at once; the workers and fixers below it
+# stay scripted, so that only the planner differs from groups B and C.
+# Run with: bench run --group L --brain real --scenario radix-llm-planner.yaml
+seed: 1
+task: radix
+fanout: 32
+depth: 3
+leak_mb: 8
+fail_rate: 0.3
+duration: 15m
+fanout_at: 2m
+quota_at: 5m
+quota_for: 20s
+interference_at: 7m
+interference_ramp: 30s
+interference_for: 4m
+interference_share: 0.3
+output_runaway_at: 9m
+envelopes:
+  lead: 9G
+  upgrade: 3500M
+  fix: 1G
+  runaway: 256M
+output_limit: 64M
+greedy:
+  leave_servers: true
+  output_runaway: true
+  unbounded_parallel: true
+  unbounded_share: 0.25
+worker_brain: scripted
+prompts:
+  lead:
+    - 'You are the planner of an upgrade of radix-ui/primitives to React 19. You have {minutes} minutes.'
+    - ''
+    - 'Each package is upgraded by a child agent that you start from bash, in the background:'
+    - '    "$MINI_AGENT" --task upgrade:PACKAGE --memory SIZE [--grow-to SIZE] > /dev/null 2>&1 &'
+    - 'Never run a child in the foreground: your bash calls would block until it ends.'
+    - 'The packages are listed by: "$TASK_DIR/list.sh". Also start, once: "$MINI_AGENT" --task runaway --memory SIZE > /dev/null 2>&1 &'
+    - ''
+    - 'You run under subactl, with a hard memory limit; every child''s --memory is taken out of it until the child ends.'
+    - '- subactl available: memory_free is what you can still hand out; suggest holds suggested limits per kind.'
+    - '- subactl suggest upgrade: a limit for upgrade workers from the peaks of earlier ones (bytes; a default until there is history).'
+    - '- subactl ls: your children, with their limits and usage.'
+    - 'A child that goes over its limit is killed (413) and its package is lost; one that does not fit yet waits and retries by itself.'
+    - 'With --grow-to, a child''s limit grows once when it nears it, if you have room. Children may start fixers of their own, which take memory from the child.'
+    - 'Messages about your children arrive between your turns.'
+    - ''
+    - 'A package is done when "$RUN_DIR/results/upgrade_PACKAGE.d1.json" contains "ok". A package whose child was killed or ended without a result may be started again.'
+    - 'Goal: as many packages done as possible before the time is up. Check progress about once a minute (for example: sleep 60; ls "$RUN_DIR/results" | wc -l; subactl ls), adjust, and start more when there is room. Stop when every package is done or the time is up.'

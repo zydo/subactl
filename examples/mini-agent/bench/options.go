@@ -8,7 +8,7 @@ import (
 
 // Options describes one run.
 type Options struct {
-	Group        string // A, B or C
+	Group        string // A, B, C or L
 	RunIndex     int
 	ScenarioPath string
 	Scenario     *scenarios.Scenario
@@ -31,5 +31,8 @@ type Options struct {
 	SocketGroup string
 	Adaptive    bool
 	Settle      time.Duration
+	// Brain and Provider are the lead's: "scripted", or "real" with an
+	// endpoint whose key is in the environment.
+	Brain, Provider string
 	Log         func(format string, a ...any)
 }

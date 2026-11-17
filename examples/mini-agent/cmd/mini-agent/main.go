@@ -83,6 +83,8 @@ func run() int {
 	model := flag.String("model", os.Getenv(envModel), "model of the real brain (default: the provider's)")
 	baseURL := flag.String("base-url", os.Getenv(envBaseURL), "API root of the real brain, e.g. a proxy (default: the provider's)")
 	prompt := flag.String("prompt", "", "what the lead should do, with the real brain (default: read it from the terminal)")
+	memoryFlag := flag.String("memory", "", "memory limit of this child agent under subactl, e.g. 2G (default: the scenario's, or subactl's suggestion)")
+	growFlag := flag.String("grow-to", "", "how far this child's limit may grow on a near-limit warning, e.g. 3G")
 	flag.Parse()
 	fail := func(code int, format string, a ...any) int {
 		fmt.Fprintf(os.Stderr, "mini-agent: "+format+"\n", a...)
@@ -95,6 +97,25 @@ func run() int {
 	real := *brainName == "real"
 	if !real && *brainName != "scripted" {
 		return fail(exitUsage, "unknown brain %q: want scripted or real", *brainName)
+	}
+	var memory, growTo int64
+	for _, f := range []struct {
+		val string
+		dst *int64
+	}{{*memoryFlag, &memory}, {*growFlag, &growTo}} {
+		if f.val != "" {
+			n, err := api.ParseBytes(f.val)
+			if err != nil || n <= 0 {
+				return fail(exitUsage, "bad size %q: want e.g. 2G or 512M", f.val)
+			}
+			*f.dst = n
+		}
+	}
+	// A scenario may give the agents below the lead a brain of their own.
+	if os.Getenv(envDepth) != "" && os.Getenv(envDepth) != "0" && *scenarioPath != "" {
+		if wsc, err := scenarios.Load(*scenarioPath); err == nil && wsc.WorkerBrain != "" {
+			real = wsc.WorkerBrain == "real"
+		}
 	}
 	var provider llm.Provider
 	if real {
@@ -138,7 +159,7 @@ func run() int {
 		sc.Adaptive = v == "1" // the bench runs one scenario file as group B or C
 	}
 	if *mode == "with" && os.Getenv(envWrapped) == "" {
-		code, err := wrap(sc, self, *task, depth, agent.Registry{Dir: *runDir})
+		code, err := wrap(sc, self, *task, depth, agent.Registry{Dir: *runDir}, memory, growTo)
 		if err != nil {
 			return fail(exitFailed, "%v", err)
 		}
@@ -310,11 +331,30 @@ func run() int {
 	case !real:
 		err = turns.run(func(tc context.Context) error { return a.Run(tc, "Carry out the task: "+label) })
 	case !lead:
-		err = turns.run(func(tc context.Context) error { return a.Run(tc, *task) })
-	case *prompt != "" || flag.NArg() > 0:
-		err = turns.run(func(tc context.Context) error {
-			return a.Run(tc, strings.TrimSpace(*prompt+" "+strings.Join(flag.Args(), " ")))
-		})
+		text := *task
+		if p := sc.Prompt(*task, sc.Duration-clock()); p != "" {
+			text = p
+		}
+		err = turns.run(func(tc context.Context) error { return a.Run(tc, text) })
+	case *prompt != "" || flag.NArg() > 0 || sc.Prompt("", 0) != "":
+		text := strings.TrimSpace(*prompt + " " + strings.Join(flag.Args(), " "))
+		if text == "" {
+			text = sc.Prompt("", sc.Duration-clock())
+		}
+		// A lead on a scenario's clock stops at its end, as the scripted
+		// lead does; whatever it started is left as it is.
+		runCtx := ctx
+		if *scenarioPath != "" {
+			var cancel context.CancelFunc
+			runCtx, cancel = context.WithDeadline(ctx, t0.Add(sc.Duration))
+			defer cancel()
+		}
+		turns.root = runCtx
+		err = turns.run(func(tc context.Context) error { return a.Run(tc, text) })
+		if errors.Is(err, context.DeadlineExceeded) || (runCtx.Err() == context.DeadlineExceeded && errors.Is(err, context.Canceled)) {
+			printer.Line("time is up")
+			err = nil
+		}
 	default:
 		// The line-mode terminal: one line in, the agent's turn out. Lines
 		// are read on their own goroutine so that a Ctrl-C at the prompt,
@@ -416,7 +456,7 @@ func run() int {
 // things have to happen around the child: an admission that is refused
 // for lack of room is tried again, and the exit status has to carry the
 // task's verdict so that "tests || mini-agent --task fix" works in bash.
-func wrap(sc *scenarios.Scenario, self, task string, depth int, reg agent.Registry) (int, error) {
+func wrap(sc *scenarios.Scenario, self, task string, depth int, reg agent.Registry, askMemory, askGrow int64) (int, error) {
 	subactl, err := exec.LookPath("subactl")
 	if err != nil {
 		// Fall back to a subactl installed next to mini-agent.
@@ -463,11 +503,18 @@ func wrap(sc *scenarios.Scenario, self, task string, depth int, reg agent.Regist
 				memory = s.Memory
 			}
 		}
+		// A planner that names the envelope itself has the last word.
+		if askMemory > 0 {
+			memory = askMemory
+		}
 		if memory == 0 {
 			memory = 1 << 30
 		}
 		args := []string{"spawn", "--wait", "--kind", kind, "--memory", strconv.FormatInt(memory, 10)}
-		if sc.Adaptive && sc.GrowFactor > 1 {
+		switch {
+		case askGrow > memory:
+			args = append(args, "--grow-to", strconv.FormatInt(askGrow, 10))
+		case askMemory == 0 && sc.Adaptive && sc.GrowFactor > 1:
 			args = append(args, "--grow-to", strconv.FormatInt(int64(float64(memory)*sc.GrowFactor), 10))
 		}
 		if sc.OutputLimit > 0 {

@@ -76,6 +76,28 @@ type Scenario struct {
 
 	// Env is extra environment for the task's shell files.
 	Env map[string]string
+
+	// WorkerBrain, when set, is the brain of every agent below the lead:
+	// "scripted" or "real". With a real lead and scripted workers the lead
+	// is the planner under test and the workers stay reproducible. Empty
+	// means the lead's brain.
+	WorkerBrain string
+	// Prompts are what a real brain is asked to do, by kind of task:
+	// "lead", "upgrade", "fix". {pkg} stands for the task's package and
+	// {minutes} for the minutes left in the run.
+	Prompts map[string]string
+}
+
+// Prompt returns the prompt for a real brain on a task ("" for the lead),
+// with {pkg} and {minutes} filled in, or "" when the scenario has none.
+func (sc *Scenario) Prompt(task string, left time.Duration) string {
+	kind, pkg, _ := strings.Cut(task, ":")
+	if task == "" {
+		kind = "lead"
+	}
+	p := sc.Prompts[kind]
+	p = strings.ReplaceAll(p, "{pkg}", pkg)
+	return strings.ReplaceAll(p, "{minutes}", fmt.Sprint(int(left.Minutes())))
 }
 
 // Blank is the scenario of a run that follows no script: a real brain
@@ -153,6 +175,30 @@ func Parse(data []byte) (*Scenario, error) {
 			sc.Env[k] = fmt.Sprint(v)
 		}
 	}
+	d.str("worker_brain", &sc.WorkerBrain)
+	sc.Prompts = map[string]string{}
+	// A prompt is a string, or a list of lines: the YAML subset has no
+	// multi-line strings.
+	if p, ok := d.take("prompts").(map[string]any); ok {
+		for kind, v := range p {
+			if kind != "lead" && kind != "upgrade" && kind != "fix" {
+				d.errs = append(d.errs, "prompts."+kind+": unknown kind; want lead, upgrade or fix")
+				continue
+			}
+			switch v := v.(type) {
+			case string:
+				sc.Prompts[kind] = v
+			case []any:
+				lines := make([]string, len(v))
+				for i, l := range v {
+					lines[i] = fmt.Sprint(l)
+				}
+				sc.Prompts[kind] = strings.Join(lines, "\n")
+			default:
+				d.errs = append(d.errs, "prompts."+kind+": want a string or a list of lines")
+			}
+		}
+	}
 	if errs := d.finish(); len(errs) > 0 {
 		return nil, fmt.Errorf("%s", strings.Join(errs, "; "))
 	}
@@ -165,6 +211,8 @@ func Parse(data []byte) (*Scenario, error) {
 		return nil, fmt.Errorf("fail_rate and greedy.unbounded_share must be between 0 and 1")
 	case sc.InterferenceShare < 0 || sc.InterferenceShare >= 1:
 		return nil, fmt.Errorf("interference_share must be at least 0 and below 1")
+	case sc.WorkerBrain != "" && sc.WorkerBrain != "scripted" && sc.WorkerBrain != "real":
+		return nil, fmt.Errorf("worker_brain must be scripted or real")
 	}
 	if _, err := fs.Stat(files, "files/"+sc.Task); err != nil {
 		return nil, fmt.Errorf("unknown task %q", sc.Task)

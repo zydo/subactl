@@ -1,0 +1,41 @@
+# The radix task with a real model as lead and as workers: the check that
+# what the scripted brain shows (orphans and a full chamber without
+# subactl, neither with it) also holds when a model does the work. Smaller
+# than radix.yaml: eight packages, no external interference.
+# Run with: bench run --group A|B --brain real --scenario radix-real.yaml
+seed: 1
+task: radix
+fanout: 8
+depth: 2
+max_packages: 8
+duration: 20m
+quota_at: 8m           # G4: the harness kills its subagents' pids, and nothing else
+quota_for: 20s
+envelopes:
+  lead: 9G
+  upgrade: 3500M
+  fix: 1G
+output_limit: 64M
+greedy:
+  leave_servers: true
+  unbounded_parallel: true
+  unbounded_share: 0.25
+worker_brain: real
+env:
+  MAX_PACKAGES: 8
+prompts:
+  lead:
+    - 'You lead an upgrade of radix-ui/primitives to React 19 (runtime React 19; the types stay on React 18). You have {minutes} minutes.'
+    - 'The packages are the first eight lines of: "$TASK_DIR/list.sh"'
+    - 'Give each package to a child agent, all at once, in the background:'
+    - '    "$MINI_AGENT" --task upgrade:PACKAGE > /dev/null 2>&1 &'
+    - 'Never run a child in the foreground: your bash calls would block until it ends.'
+    - 'A package is done when "$RUN_DIR/results/upgrade_PACKAGE.d1.json" contains "ok". A child may be killed before it writes a result; start that package again.'
+    - 'Check about once a minute (for example: sleep 60; ls "$RUN_DIR/results"), and stop when every package is done or the time is up.'
+  upgrade:
+    - 'Upgrade the package {pkg} of radix-ui/primitives so that it works with React 19 at runtime (the types stay on React 18). You have about {minutes} minutes.'
+    - '1. Run "$TASK_DIR/setup.sh". It creates your own worktree in $WT; work only there.'
+    - '2. Run "$TASK_DIR/typecheck.sh", then "$TASK_DIR/preview.sh", which starts the dev server of the stories.'
+    - '3. Run "$TASK_DIR/test.sh": the jest tests of the package and its stories in a browser. If it fails, find out why and fix it by editing files under $WT/packages/react/; never run yarn and never touch node_modules. Run test.sh again until it passes.'
+    - '4. When test.sh passes, run: echo ok > "$WORK/status.test"; "$TASK_DIR/finish.sh" setup typecheck preview test'
+    - 'Then say in one sentence what you changed.'

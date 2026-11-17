@@ -378,7 +378,11 @@ func Run(o Options) (*Summary, error) {
 		}
 		env = append(env, "SUBACTL_SOCK="+sock, "MINI_AGENT_ADAPTIVE="+adaptive, "PATH="+o.BinDir+":"+os.Getenv("PATH"))
 	}
-	lead := exec.Command(o.MiniAgent, "--mode", o.Mode, "--scenario", o.ScenarioPath, "--run-dir", runDir)
+	args := []string{"--mode", o.Mode, "--scenario", o.ScenarioPath, "--run-dir", runDir}
+	if o.Brain == "real" {
+		args = append(args, "--brain", "real", "--provider", o.Provider)
+	}
+	lead := exec.Command(o.MiniAgent, args...)
 	lead.Dir, lead.Env = o.WorkDir, env
 	lead.Stdout, lead.Stderr = leadLog, leadLog
 	lead.SysProcAttr = &syscall.SysProcAttr{Credential: cred, Setsid: true}

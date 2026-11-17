@@ -21,7 +21,7 @@ type GroupData struct {
 // and <dir>/<group>/run-N/series.jsonl.
 func LoadResults(dir string) ([]GroupData, error) {
 	var out []GroupData
-	for _, name := range []string{"A", "B", "C"} {
+	for _, name := range []string{"A", "B", "C", "L"} {
 		data, err := os.ReadFile(filepath.Join(dir, name, "summary.json"))
 		if os.IsNotExist(err) {
 			continue
@@ -219,12 +219,13 @@ func WriteSeriesParquet(path string, groups []GroupData) error {
 
 // Colours per group, readable on white and distinct without relying on
 // red against green.
-var groupColour = map[string]string{"A": "#c0392b", "B": "#2c6fbb", "C": "#1b8a5a"}
+var groupColour = map[string]string{"A": "#c0392b", "B": "#2c6fbb", "C": "#1b8a5a", "L": "#8e44ad"}
 
 var groupLabel = map[string]string{
 	"A": "A: without subactl",
 	"B": "B: static envelopes",
 	"C": "C: suggested envelopes that grow",
+	"L": "L: a model as planner",
 }
 
 // MemoryChart draws the chamber's working set over time, one line per

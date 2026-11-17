@@ -4,6 +4,10 @@
 #   bench/chamber/run.sh GROUP SCENARIO RUNS OUT_DIR [CHAMBER_SIZE]
 #   bench/chamber/run.sh A scenarios/radix.yaml 5 /tmp/bench-a 12G
 #
+# BENCH_ARGS adds arguments to "bench run", e.g. BENCH_ARGS="--brain real"
+# for a lead with a real model; DEEPSEEK_API_KEY is passed into the
+# container from the environment, never written to a file.
+#
 # The first run prepares the radix task environment in the Docker volume
 # subactl-radix-check, which takes a few minutes and needs network access.
 set -euo pipefail
@@ -31,6 +35,7 @@ docker run --rm --privileged \
   -v "$(cd "$(dirname "$scenario")" && pwd):/sc:ro" \
   -v "$out:/host" \
   -e GROUP="$group" -e SCENARIO="$(basename "$scenario")" -e RUNS="$runs" -e CHAMBER="$chamber" \
+  -e BENCH_ARGS="${BENCH_ARGS:-}" ${DEEPSEEK_API_KEY:+-e DEEPSEEK_API_KEY} \
   subactl-radix-env bash -c '
     set -e
     chown node:node /srv/radix
@@ -39,7 +44,7 @@ docker run --rm --privileged \
       [ -d /srv/radix/shots-base ] || RADIX_HOME=/srv/radix /tmp/task/prepare.sh
       git -C /srv/radix/primitives worktree prune"
     /opt/subactl/bench run --group "$GROUP" --scenario "/sc/$SCENARIO" --runs "$RUNS" --chamber "$CHAMBER" \
-      --user node --workdir /srv/radix/primitives --out /tmp/out
+      --user node --workdir /srv/radix/primitives --out /tmp/out $BENCH_ARGS
     # Copy out the measurements; the run directories stay in the container.
     cd /tmp/out/"$GROUP"
     cp summary.json /host/

@@ -58,7 +58,9 @@ func hog(args []string) error {
 
 func run(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	group := fs.String("group", "A", "experiment group: A without subactl, B with static envelopes, C with suggested envelopes that grow")
+	group := fs.String("group", "A", "experiment group: A without subactl, B with static envelopes, C with suggested envelopes that grow, L with a planner that sizes its workers itself")
+	brain := fs.String("brain", "scripted", "brain of the lead: scripted or real (the scenario's worker_brain decides the workers')")
+	provider := fs.String("provider", "deepseek", "endpoint of a real brain; its key is read from the environment")
 	reserveFlag := fs.String("reserve", "", "reserve line inside the chamber for groups B and C (default: 15% of the chamber)")
 	scenarioPath := fs.String("scenario", "", "scenario file")
 	runs := fs.Int("runs", 5, "how many runs")
@@ -71,8 +73,11 @@ func run(args []string) error {
 	settle := fs.Duration("settle", 60*time.Second, "how long to observe after the lead ends")
 	fs.Parse(args)
 
-	if *group != "A" && *group != "B" && *group != "C" {
-		return fmt.Errorf("unknown group %q: want A, B or C", *group)
+	if *group != "A" && *group != "B" && *group != "C" && *group != "L" {
+		return fmt.Errorf("unknown group %q: want A, B, C or L", *group)
+	}
+	if *group == "L" && *brain != "real" {
+		return fmt.Errorf("group L is a real planner: give --brain real")
 	}
 	sc, err := scenarios.Load(*scenarioPath)
 	if err != nil {
@@ -125,6 +130,7 @@ func run(args []string) error {
 			BinDir: filepath.Dir(self), Reserve: reserve, SocketGroup: grp.Name, Adaptive: *group == "C",
 			StateDir:  stateDir(abs(*out), *group, i),
 			MiniAgent: abs(*miniAgent), Self: self, OutDir: outDir, WorkDir: abs(*workDir),
+			Brain: *brain, Provider: *provider,
 			Base: *base, ChamberBytes: bytes, UID: uid, GID: gid, Home: u.HomeDir, Settle: *settle,
 			Log: func(f string, a ...any) { fmt.Fprintf(os.Stderr, time.Now().Format("15:04:05 ")+f+"\n", a...) },
 		})
@@ -139,11 +145,11 @@ func run(args []string) error {
 	return os.WriteFile(filepath.Join(abs(*out), *group, "summary.json"), data, 0o644)
 }
 
-// stateDir is where subactld keeps its audit log. Group C keeps one
-// directory for all its runs: its suggestions are meant to improve from
-// run to run. Group B starts every run without history.
+// stateDir is where subactld keeps its audit log. Groups C and L keep one
+// directory for all their runs: suggestions are meant to improve from run
+// to run, whoever reads them. Group B starts every run without history.
 func stateDir(out, group string, run int) string {
-	if group == "C" {
+	if group == "C" || group == "L" {
 		return filepath.Join(out, group, "state")
 	}
 	return filepath.Join(out, group, fmt.Sprintf("run-%d", run), "state")
