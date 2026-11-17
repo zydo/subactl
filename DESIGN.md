@@ -107,7 +107,7 @@ v1 要解决六个问题：
 | acgroup | cgroup 目录；限额设在 lease 目录上，进程放在其叶子 `_self/` 中（见核心模型） | Job Object（Windows 8 起支持嵌套） | 进程组 + subactld 归属表 | VM 内的 cgroup |
 | 归属 | 子进程自动继承 / hard | 子进程自动进入 job / hard | 每次采样时扫描进程表，按父子链和进程组登记；成员表落盘，供重启后的 fail-closed 清理 / soft（NOTE\_FORK 不带子进程 pid，NOTE\_TRACK 不可用） | hard |
 | 内存口径 | working\_set：memory.current − inactive\_file | commit：私有提交内存 | phys\_footprint 之和 | working\_set |
-| 内存硬限 | memory.max + memory.oom.group / hard | job memory limit（限的是 commit）。超限时只是分配失败、不终止进程，subactld 收到 JOB\_OBJECT\_MSG\_JOB\_MEMORY\_LIMIT 后调用 TerminateJobObject / hard | 每秒采样，超限即整组终止，记 413 / monitor\_only | hard |
+| 内存硬限 | memory.max + memory.oom.group / hard | job memory limit（限的是 commit）。超限时只是分配失败、不终止进程，subactld 收到 JOB\_OBJECT\_MSG\_JOB\_MEMORY\_LIMIT 后调用 TerminateJobObject / hard | 每 200 毫秒检查一次（实现），超限即整组终止，记 413 / monitor\_only | hard |
 | CPU | cpu.max / hard | CPU rate control / hard | monitor\_only | hard |
 | 进程数 | pids.max / hard | active process limit / hard | monitor\_only | hard |
 | 整组终止 | cgroup.kill / hard | TerminateJobObject / hard | 遍历归属表逐个 kill 并验证 / soft | hard |
@@ -703,14 +703,14 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 | 外部负载突然增长 | I-B 暂时不成立 | 容量缩水时先拒绝新请求；MemAvailable 跌破预留线才兜底终止，CAPACITY\_SHRUNK 先给 planner 一个窗口 |
 | agent 主动逃逸（[anthropics/claude-code#60488](https://github.com/anthropics/claude-code/issues/60488)） | 硬限失效 | cgroup namespace、独立 uid、逃逸扫描，见 F3 |
 | 各平台口径不一致（Windows 的 commit 口径通常偏大） | 同一组配额在不同平台上的表现不同 | 所有数据都带 mem\_basis；配额建议按平台分别统计 |
-| macOS 只能做到 monitor 级别 | 硬限不可靠 | 如实标注等级，调高预留线；需要硬限时走 Linux VM（v2） |
+| macOS 只能做到 monitor 级别 | 硬限不可靠 | 如实标注等级，调高预留线；需要硬限时走 Linux VM（v2）。实现：预留线为 25%，超限检查每 200 毫秒一次，见开放问题 1 |
 | 模拟与现实有偏差 | 实验结论难以外推 | 演示任务用真实仓库，真实的 yarn、tsc 和 Chrome；scripted 的结论再用 real 大脑抽样复核，并用 subactl run 包装第三方 agent 验证 |
 | 自研 harness 的边界情况 | 流式解析、edit 匹配等细节出错，影响实验稳定性 | 范围只限 demo 所需（一家 provider、顺序执行工具、行模式 TUI）；对实验结论起决定作用的是 scripted 大脑，它不经过网络和解析路径；real 大脑的 SSE 解析用录制的响应做回归测试 |
 | 单一 subactld 是共享故障域 | daemon 崩溃时全部 lead 被回收 | fail-closed 保证不泄漏；v2 引入 per-lease supervisor |
 
 **开放问题**：
 
-1. ~~预留线的默认值~~ 已定（实现）：max(15%, 8GiB)，但不超过 MemTotal 的一半，以免小内存机器没有容量；macOS 暂用同一公式，没有另行提高。
+1. ~~预留线的默认值~~ 已定（实现）：max(15%, 8GiB)，但不超过 MemTotal 的一半，以免小内存机器没有容量。macOS 上提高为 max(25%, 8GiB)，同样不超过一半：没有内核硬限，lease 会超出自己的上限，超出量约等于两次检查之间分配的内存。实测每秒检查一次时，以 100MiB/s 分配的 lease 超出 33MiB，以 2GiB/s 分配的超出 1GiB；所以 macOS 上的超限检查同时改为每 200 毫秒一次，超出量降到 8MiB 和 284MiB。多出的预留线用来容纳几个 lease 同时超出。
 2. ~~`max_idle`、`max_idle_done`、停滞阈值 N 的默认值~~ 已定（实现）：30 分钟、60 秒、10 分钟。
 3. ~~`subactl run` 的第三方退化模式是否保留~~ 已定（实现）：保留。
 4. 主流 harness（Claude Code、Codex、Pi 等）的 adapter 如何实现。v1 只交付 mini-agent 内建的 adapter。仍未决。
@@ -817,7 +817,7 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 - 建议配额只统计 2xx 结束的 lease，否则会随 413 一路上涨。
 - NEAR\_LIMIT 每次越线只推送一次，回落到 85% 以下才重新武装。
 - 兜底终止每终止一个 lease 后重新要求连续 3 次低读数；树内按 `kill_order`、再按最大叶子选择。
-- macOS 的有效容量来自 `kern.memorystatus_level`。
+- macOS 的有效容量来自 `kern.memorystatus_level`；预留线默认 25%（Linux 为 15%），超限检查每 200 毫秒一次，其余仍每秒一次。
 
 **mini-agent 与实验**
 - 子节点的自包装不 exec，而是留一个等待进程，用于在配额不足时重试，并让退出码表达任务成败。

@@ -62,6 +62,9 @@ type Config struct {
 	TermWait time.Duration
 	// Tick is how often wall-time and output limits are checked (default 1s).
 	Tick time.Duration
+	// LimitCheck is how often a backend that only monitors memory has its
+	// leases checked against their limits (default 200ms).
+	LimitCheck time.Duration
 	// EscapeScan is how often escaped processes are looked for (default 5s).
 	EscapeScan time.Duration
 	Log        *slog.Logger
@@ -162,6 +165,9 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 	if cfg.Tick == 0 {
 		cfg.Tick = time.Second
 	}
+	if cfg.LimitCheck == 0 {
+		cfg.LimitCheck = 200 * time.Millisecond
+	}
 	if cfg.EscapeScan == 0 {
 		cfg.EscapeScan = 5 * time.Second
 	}
@@ -184,6 +190,9 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 		return nil, err
 	}
 	go m.tickLoop(ctx)
+	if m.be.Capabilities().Memory == api.LevelMonitorOnly {
+		go m.limitLoop(ctx)
+	}
 	if sc, ok := m.be.(backend.EscapeScanner); ok {
 		go m.escapeLoop(ctx, sc)
 	}

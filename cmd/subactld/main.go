@@ -134,6 +134,9 @@ func run() error {
 		return fmt.Errorf("read total memory: %w", err)
 	}
 	reserve := hostmem.DefaultReserve(total)
+	if be.Capabilities().Memory == api.LevelMonitorOnly {
+		reserve = hostmem.MonitorReserve(total)
+	}
 	if *reserveFlag != "" {
 		if reserve, err = api.ParseBytes(*reserveFlag); err != nil {
 			return fmt.Errorf("--reserve: %w", err)

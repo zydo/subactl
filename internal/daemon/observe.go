@@ -182,6 +182,40 @@ func (m *Manager) tickLoop(ctx context.Context) {
 	}
 }
 
+// limitLoop is the memory limit of a backend that can only monitor
+// memory: it checks every lease more often than the main tick, because a
+// lease overshoots its limit by what it allocates between two checks.
+// Everything else (time lines, warnings, idleness) stays on the tick.
+func (m *Manager) limitLoop(ctx context.Context) {
+	tick := time.NewTicker(m.cfg.LimitCheck)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+		if m.abandoned.Load() {
+			return
+		}
+		m.mu.Lock()
+		live := make([]liveLease, 0, len(m.rt))
+		for id, rt := range m.rt {
+			live = append(live, liveLease{id: id, group: rt.group})
+		}
+		m.mu.Unlock()
+		for _, r := range live {
+			ls, ok := m.led.Get(r.id)
+			if !ok || ls.State != api.StateRunning || ls.Envelope.Memory <= 0 {
+				continue
+			}
+			if u, err := m.be.Sample(ctx, r.group); err == nil && u.Memory > ls.Envelope.Memory {
+				go m.reap(r.id, api.CodeOOMLeaseLimit, map[string]any{"detected_by": "sampling", "usage": u.Memory})
+			}
+		}
+	}
+}
+
 type liveLease struct {
 	id      api.LeaseID
 	group   backend.ACGroup

@@ -63,6 +63,8 @@ type Backend struct {
 	groups map[api.LeaseID]*group
 	// left is what the membership file said a previous daemon left behind.
 	left map[api.LeaseID][]int
+	// scanned is when the process table was last read.
+	scanned time.Time
 }
 
 // New prepares the state directory and reads the previous membership file.
@@ -117,6 +119,7 @@ func (b *Backend) scanLocked() error {
 	if err != nil {
 		return err
 	}
+	b.scanned = time.Now()
 	alive := map[int]procInfo{}
 	for _, p := range procs {
 		alive[p.pid] = p
@@ -362,8 +365,12 @@ func (b *Backend) Sample(_ context.Context, g backend.ACGroup) (api.Usage, error
 	if err != nil {
 		return api.Usage{}, err
 	}
-	if err := b.scanLocked(); err != nil {
-		return api.Usage{}, err
+	// Samples of every lease come in a burst, several times a second: one
+	// reading of the process table serves them all.
+	if time.Since(b.scanned) > 100*time.Millisecond {
+		if err := b.scanLocked(); err != nil {
+			return api.Usage{}, err
+		}
 	}
 	u := api.Usage{MemBasis: api.BasisPhysFootprint, SampledAt: time.Now()}
 	for _, sub := range b.subtreeLocked(own) {

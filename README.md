@@ -49,7 +49,9 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
   integration` enforces the bound.
 - **M6, macOS: done, as monitoring only.** The `darwin` backend keeps a
   membership table from the process table, samples physical footprint and
-  kills a lease that is over its limit one sample late. It reports every
+  kills a lease that is over its limit, checking every 200ms; its default
+  reserve line is 25% of memory rather than 15%, for what a lease
+  allocates between two checks. It reports every
   capability as soft or monitor_only and escape prevention as unsupported,
   so a request that requires hard enforcement is refused. `subactld` runs
   there as an ordinary user. The effective capacity follows the kernel's
