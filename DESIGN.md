@@ -112,7 +112,7 @@ v1 要解决六个问题：
 | 进程数 | pids.max / hard | active process limit / hard | monitor\_only | hard |
 | 整组终止 | cgroup.kill / hard | TerminateJobObject / hard | 遍历归属表逐个 kill 并验证 / soft | hard |
 | 父节点死亡检测 | pidfd / hard | 等待进程句柄 / hard | kqueue NOTE\_EXIT / soft | 跨 VM 心跳 / soft |
-| 防逃逸（经 cgroupfs 或 breakaway 脱离） | cgroup namespace + 内核的迁移可达性检查 + no\_new\_privs（实现）/ hard | 禁止 breakaway / hard | unsupported | hard |
+| 防逃逸（经 cgroupfs 或 breakaway 脱离） | cgroup namespace + 内核的迁移可达性检查 + no\_new\_privs（实现）/ hard | 禁止 breakaway / hard | unsupported。实现：按环境标记事后检测也做不到，macOS 的 `kern.procargs2` 对普通用户只给出其他进程的参数、不给环境变量（daemon 在 macOS 上以普通用户运行） | hard |
 | 调用方身份 | SO\_PEERCRED → 所在 acgroup；6.5+ 另取 SO\_PEERPIDFD，查完归属后确认调用方仍存活 / hard | GetNamedPipeClientProcessId + IsProcessInJob / hard | LOCAL\_PEERPID → 归属表 / soft | hard |
 | 宿主可用内存 | `/proc/meminfo` 的 MemAvailable；在受限的外层 cgroup 里可改用该 cgroup 的 memory.max 与用量（实现） | 可用物理内存 | `kern.memorystatus_level`，即内核内存压力机制认为可用的比例（实现） | VM 内的 meminfo |
 | 交付阶段 | v1 | 推迟（实现） | v1（monitor，实现） | v2 |
