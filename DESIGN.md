@@ -217,7 +217,7 @@ planner 需要的所有数据，都来自 subactld 从 backend 读到的实测�
 **metrics 与追溯**：
 
 - **Prometheus `GET /metrics`**：有效容量、已分配额度、外部占用、各终止码计数、兜底终止次数、按 reason 统计的准入拒绝次数、各 kind 的用量分布（histogram）。按 Prometheus 文本格式手写输出，不依赖 client\_golang。label 只用 kind、depth、code，不用 lease id 或 lead id：两者都持续创建销毁，会让序列数爆炸。单个 lease 的数据走下面的时间线。
-- **per-lease 时间线**：subactld 为每个存活 lease 在内存里保留 1 秒粒度的 ring buffer（默认 10 分钟），同时降采样到 5 秒，与审计日志一起落盘为 JSONL。`subactl trace <lease>` 重建完整时间线：spawn → 内存与 CPU 曲线 → 事件 → 注入的控制消息 → 工具调用信标 → 终止码与证据。实现：已结束 lease 的 1 秒粒度时间线在内存里再保留最近 1024 个，更早的从审计日志按 5 秒粒度重建；每个 lease 最多保留 500 个事件；`--tree` 未实现，用 `subactl ls` 看子树。
+- **per-lease 时间线**：subactld 为每个存活 lease 在内存里保留 1 秒粒度的 ring buffer（默认 10 分钟），同时降采样到 5 秒，与审计日志一起落盘为 JSONL。`subactl trace <lease>` 重建完整时间线：spawn → 内存与 CPU 曲线 → 事件 → 注入的控制消息 → 工具调用信标 → 终止码与证据。实现：已结束 lease 的 1 秒粒度时间线在内存里再保留最近 1024 个，更早的从审计日志按 5 秒粒度重建；每个 lease 最多保留 500 个事件；`--tree` 未实现，用 `subactl ls` 看子树。trace 另附 `spikes`：把内存增长达到 64MiB 的区间归到当时那次工具调用的信标（实现）。
 - **工具调用叠加**：进度信标带上工具名与序号（不带参数，以防注入和泄露），trace 把它们叠加在用量曲线上，直接回答"哪一次 bash 调用让内存涨了 4GB"。这是分析 agent 行为最有价值的一项。
 - **`subactl top`**：类似 htop 的 TUI，显示各 lead 的 agent 树、每个节点的用量与配额进度条、状态（working / awaiting\_input / done）和最近事件。它是 API 的普通客户端，与具体 harness 无关。实现：进度条到 90% 时改用另一种字符；长时间无信标的节点标出静默时长；`--once` 打印一帧后退出。为此 lease 对象增加了 `activity` 字段（最后一次信标）。
 - **自报数据**：LLM token 用量 subactld 测不到，只能由 adapter 上报，记录时标为 `self_reported`，与实测数据分开。
@@ -645,7 +645,7 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 
 功能标准 F1–F33 需要在 Linux cgroup v2 环境下全部通过；Windows 和 macOS 按各自能力矩阵声明的等级验收。实验标准 E1–E3 必须达成。每一条都要有对应的自动化测试或实验脚本。
 
-实现状态（2026-11-17）：`[x]` 已达成，`[~]` 部分达成（缺口写在括注里）。集成测试在四个 Linux 环境上通过：Docker Desktop（arm64）、GitHub Actions、VirtualBox VM（Ubuntu 26.04）、一台物理机（x86-64，以特权 Docker 运行）；macOS backend 的测试在本机与 GitHub Actions 的 macOS 作业上通过。
+实现状态（2026-11-17）：`[x]` 已达成，`[~]` 部分达成（缺口写在括注里）。F1–F33 全部达成。集成测试在四个 Linux 环境上通过：Docker Desktop（arm64）、GitHub Actions、VirtualBox VM（Ubuntu 26.04）、一台物理机（x86-64，以特权 Docker 运行）；macOS backend 的测试在本机与 GitHub Actions 的 macOS 作业上通过。
 
 **功能**：
 
@@ -669,18 +669,18 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 - [x] F18 声明式策略：on\_near\_limit.grow\_to 在有余量时 2 秒内生效，没有余量时不扩容；kill\_order 改变兜底终止顺序；没有声明的情况 subactld 不作为。（实现：单元测试）
 - [x] F19 校验：参数非法的命令整条被拒绝、没有副作用，返回的错误包含字段、期望值和示例。（实现：单元测试，覆盖 HTTP 层与所有变更类命令的 --dry-run）
 - [x] F20 闲置检测：分别注入完成后闲置和停滞两种情况，每种都在阈值到达后 10 秒内向 planner 推送且只推送一次；planner 不处理时在对应截止后回收，终止码为 410；awaiting\_input 状态不计入闲置；一次 20 分钟无信标的长工具调用不会被回收。（实现：单元测试（模拟时间），含 20 分钟无信标的长调用不被回收）
-- [~] F21 信标不消耗 LLM：进度信标全程由 adapter 上报，subagent 的 LLM 调用次数不因此增加。（实现：信标由 adapter 在 hook 中直接调用 API，不经过模型；没有单独的计数测试）
+- [x] F21 信标不消耗 LLM：进度信标全程由 adapter 上报，subagent 的 LLM 调用次数不因此增加。（实现：信标由 adapter 在 hook 中直接调用 API，不经过模型。测试：同一段脚本化运行，带与不带 adapter 都是 4 次模型调用，带 adapter 时另有 6 个信标）
 - [x] F22 向上合并：planner 的一轮之内注入 100 个同类事件，下一轮只收到一条合并后的摘要。（实现：adapter 单元测试：100 条同类事件合并为一行）
 - [x] F23 意见兜底："意见、截止与兜底"表中的每一行，在 LLM 不响应时都会在截止后执行对应的兜底动作。（实现：由 F4、F8、F17、F20 的测试共同覆盖）
 - [x] F24 scratch 生命周期：子 lease 回收后其 scratch 目录仍可被父节点读取；父 lease 结束后一并删除；done 提交 scratch 目录之外的路径时被拒绝。（实现：集成测试）
 
 * [x] F25 lead 与自包装：直接运行 `mini-agent` 时自动成为 lead，TUI 在用户终端中正常交互（包括窗口缩放）；关闭终端后整棵树在 5 秒内回收（502）；agent 在 bash 中直接运行 `mini-agent --task X &` 时，该进程成为当前节点的子节点。（实现：VM 上：with 模式下 lead 自动获得终端，窗口大小随动；断开 SSH 后整棵树 1 秒内回收，记 502；真实模型在 bash 里调用 mini-agent 派生的子节点进入了 agent 树）
-* [~] F26 shell 无关：分别在 bash、zsh、fish 中启动 lead，行为一致；agent 工具使用的 shell 不受用户 `$SHELL` 影响。（实现：bash 与 zsh 测试通过；本机没有 fish，未测）
+* [x] F26 shell 无关：分别在 bash、zsh、fish 中启动 lead，行为一致；agent 工具使用的 shell 不受用户 `$SHELL` 影响。（实现：CI 在 Linux 与 macOS 上安装 zsh 和 fish，测试要求三个 shell 都在，缺一个即失败；agent 的 bash 工具固定用 bash，与 `$SHELL` 无关）
 * [x] F27 多 lead 隔离：两个 lead 并发运行，其中一个扇出到自身配额上限时，另一个 lead 的 completion 不下降，在该 lead 的 CPU 需求不超过一半核数、且测试负载以 CPU 为主时（v1 不控制 IO），p95 任务延迟上升不超过 20%；跨 lead 的查询、终止、通知全部返回 403。（实现：物理机 16 个同构核上 p95 上升 1%–2%（四次），大小核混用 9%；虚拟机上的虚拟 CPU 不独立，无法测量。跨 lead 控制面隔离通过）
-* [~] F28 operator 权限：同 uid 的 operator 能查看并终止自己的 lead 树，不能操作其他 uid 的 lead；subactl-admin 组可以操作全部。（实现：单元测试；subactl-admin 组的判定未在测试中覆盖）
+* [x] F28 operator 权限：同 uid 的 operator 能查看并终止自己的 lead 树，不能操作其他 uid 的 lead；subactl-admin 组可以操作全部。（实现：集成测试经真实 socket：另一个用户（nobody）看不到、也终止不了别人的 lead，加入 subactl-admin 组后两者都能做；测试结束后系统的组恢复原状）
 * [x] F29 跨 lead 兜底：兜底终止从当前用量最大的 lead 中选择终止对象；一个 lead 设置的 kill\_order 不影响其他 lead 的节点。（实现：单元测试）
 * [x] F30 metrics：`/metrics` 暴露所列指标；连续创建 10000 个 lease 后，序列数不随 lease 数增长。（实现：单元测试：一万个 lease 后序列数不变）
-* [~] F31 trace：对任一已结束的 lease，`subactl trace` 能重建时间线，并把一次注入的内存突增定位到具体的工具调用信标。（实现：trace 含 1 秒样本、事件、注入的控制消息和带工具名的信标，并可从审计日志重建；“定位内存突增”这一步没有专门的测试）
+* [x] F31 trace：对任一已结束的 lease，`subactl trace` 能重建时间线，并把一次注入的内存突增定位到具体的工具调用信标。（实现：trace 含 1 秒样本、事件、注入的控制消息和带工具名的信标，并可从审计日志重建；另有 `spikes`：以相邻两个信标之间为一次工具调用，列出内存增长达到 64MiB 的调用，按增长从大到小。真实内核上 256MiB 的分配三次都归到了发生它的那次调用）
 * [x] F32 观测故障隔离：让时间序列落盘目录变为只读或写满后，NEAR\_LIMIT 推送和 kill\_tree 的延迟不受影响，丢弃计数增加。（实现：单元测试：审计目录只读时 NEAR_LIMIT 与 kill_tree 的延迟不变，丢弃数增加）
 
 - [x] F33 运行身份：lead 与子 agent 的进程 uid 等于发起者的 uid，没有任何 agent 以 root 运行；operator 是 root 且未指定非 root uid 时，`subactl run -it` 被拒绝。（实现：集成测试；另验证了 no_new_privs 下 sudo 被拒）

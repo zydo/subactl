@@ -42,7 +42,8 @@ A refusal is JSON on stderr with a `reason`:
 subactl ls                              # your subtree, with usage and activity
 subactl resize LEASE --memory 6G        # a child's limit; never your own
 subactl notify LEASE --type NEAR_LIMIT --reason "wrap up"
-subactl trace LEASE                     # usage over time, events, how it ended
+subactl trace LEASE                     # usage over time, events, how it ended,
+                                        # and "spikes": tool calls that grew memory by 64MiB+
 ```
 
 To get more for yourself, ask your parent: `subactl resize-request --memory 6G`.
