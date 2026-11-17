@@ -19,6 +19,8 @@ if command -v timeout >/dev/null; then
   [ "$left" -gt 1 ] || { echo "no time left"; exit 0; }
   limit=(timeout "$left")
 fi
-printf '%s\n' "${todo[@]}" | "${limit[@]}" xargs -P "$FANOUT" -I{} "$MINI_AGENT" --task {}
+# ${limit[@]+...}: bash 3.2, which macOS ships, treats an empty array as
+# unset under "set -u".
+printf '%s\n' "${todo[@]}" | ${limit[@]+"${limit[@]}"} xargs -P "$FANOUT" -I{} "$MINI_AGENT" --task {}
 echo "dispatch finished with status $?"
 ls "$RUN_DIR/results" | wc -l

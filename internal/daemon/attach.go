@@ -21,8 +21,16 @@ type ttyRelay struct {
 
 	mu     sync.Mutex
 	client io.Writer
-	closed chan struct{} // closed when the agent's side of the pty is gone
+	// early is what the agent wrote before the first client attached: its
+	// first prompt must not be lost to the moment between spawn and
+	// attach. It is bounded, and dropped once a client has been attached.
+	early    []byte
+	attached bool
+	closed   chan struct{} // closed when the agent's side of the pty is gone
 }
+
+// maxEarly bounds the output kept for a client that has not attached yet.
+const maxEarly = 64 << 10
 
 func newTTYRelay(master *os.File) *ttyRelay {
 	r := &ttyRelay{master: master, closed: make(chan struct{})}
@@ -37,6 +45,11 @@ func newTTYRelay(master *os.File) *ttyRelay {
 				if r.client != nil {
 					if _, werr := r.client.Write(buf[:n]); werr != nil {
 						r.client = nil
+					}
+				} else if !r.attached {
+					r.early = append(r.early, buf[:n]...)
+					if len(r.early) > maxEarly {
+						r.early = r.early[len(r.early)-maxEarly:]
 					}
 				}
 				r.mu.Unlock()
@@ -66,7 +79,11 @@ func (m *Manager) Attach(c Caller, id api.LeaseID, conn io.ReadWriter) error {
 		r.mu.Unlock()
 		return apiErr(http.StatusConflict, api.ErrConflict, "another client is attached to lease %s", id)
 	}
-	r.client = conn
+	r.client, r.attached = conn, true
+	if len(r.early) > 0 {
+		_, _ = conn.Write(r.early)
+		r.early = nil
+	}
 	r.mu.Unlock()
 	defer func() {
 		r.mu.Lock()
