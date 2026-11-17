@@ -36,8 +36,12 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
   has been run against DeepSeek and Z.AI through their compatible
   endpoints, on its own and as a lead with child agents under subactl.
   Against Anthropic's own API it is tested with recorded streams only.
-- Not done: the macOS monitor and Windows backends (M6), and an automated
-  test of CPU fairness between leads (F27).
+- **One acceptance criterion is not met: F27's CPU bound.** Next to a lead
+  that keeps every CPU busy, a quiet lead's p95 task time rose by about
+  50% on the development machine, where the design allows 20%. Without
+  subactl the same load raised it by about 280%. The control-plane half of
+  F27 holds. `SUBACTL_F27_STRICT=1 make integration` enforces the bound.
+- Not done: the macOS monitor and Windows backends (M6).
 
 ## Try it
 
