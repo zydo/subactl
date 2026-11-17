@@ -24,6 +24,7 @@ const (
 	keptTraces    = 1024 // traces of reaped leases kept in memory
 	rearmFraction = 0.85 // NEAR_LIMIT re-arms once usage falls below this share
 	topProcs      = 3    // processes listed in a termination's evidence
+	topProcsFrom  = 0.75 // share of the limit from which they are listed at every sample
 )
 
 // leaseObs is what is observed about one lease. It is kept apart from the
@@ -262,9 +263,13 @@ func (m *Manager) observeSample(ctx context.Context, ls api.Lease, u api.Usage) 
 	case l.near && float64(u.Memory) < rearmFraction*float64(limit):
 		l.near = false
 	}
-	near := l.near
+	// Keep a list of the largest processes while the lease is close to its
+	// limit, or growing fast enough to reach it within two samples: the
+	// kernel's group kill leaves nothing to list afterwards.
+	watch := l.near || float64(u.Memory) >= topProcsFrom*float64(limit) ||
+		limit > 0 && float64(u.Memory)+rate*2*m.cfg.Tick.Seconds() >= float64(limit)
 	o.mu.Unlock()
-	if lister, ok := m.be.(backend.ProcLister); ok && near {
+	if lister, ok := m.be.(backend.ProcLister); ok && watch {
 		if rt := m.runtime(ls.ID); rt != nil {
 			if top, err := lister.TopProcs(ctx, rt.group, topProcs); err == nil && len(top) > 0 {
 				o.mu.Lock()

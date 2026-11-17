@@ -1322,8 +1322,10 @@ exec awk 'BEGIN { s = "x"; while (length(s) < 200000000) s = s s; system("sleep 
 // although that process is gone by the time the daemon reaps the lease.
 func TestIntegrationTopProcsAfterOOM(t *testing.T) {
 	e := newEnv(t)
-	// About 20MiB a second, so that samples see it near the limit.
-	id := e.run(e.op, 128*mib, `exec awk 'BEGIN { while (1) { s = s sprintf("%1000000s", ""); system("sleep 0.05") } }'`)
+	// About 60MiB a second: from 90% of the limit to the limit in a fifth
+	// of a second, less than the time between two samples, so the list
+	// must be taken before the lease is that close.
+	id := e.run(e.op, 128*mib, `exec awk 'BEGIN { while (1) { s = s sprintf("%3000000s", ""); system("sleep 0.05") } }'`)
 	term := e.wait(id, 30*time.Second)
 	top, _ := term.Evidence["top_procs"].([]api.Proc)
 	t.Logf("evidence: %+v", term.Evidence)
