@@ -36,14 +36,13 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
   has been run against DeepSeek and Z.AI through their compatible
   endpoints, on its own and as a lead with child agents under subactl.
   Against Anthropic's own API it is tested with recorded streams only.
-- **One acceptance criterion is undecided: F27's CPU bound.** Next to a
-  lead that keeps every CPU busy, a quiet lead's p95 task time rose by 50%
-  to 82% on the two virtual machines available, where the design allows
-  20%. But on the same VM a task slowed by 143% with no cgroups and a CPU
-  left free, just because the other CPUs were busy: its virtual CPUs are
-  not independent, so the bound cannot be measured there. It needs a
-  bare-metal Linux machine; `SUBACTL_F27_STRICT=1 make integration`
-  enforces it. The control-plane half of F27 holds.
+- **F27's CPU bound is met on bare metal.** Next to a lead that keeps
+  every CPU busy, a quiet lead's p95 task time rose by 1% to 2% on sixteen
+  identical cores of a physical machine, and by 9% with fast and slow
+  cores mixed; the design allows 20%. On virtual machines the bound cannot
+  be measured, because their CPUs are not independent: there a task slows
+  far more than that with no cgroups at all. `SUBACTL_F27_STRICT=1 make
+  integration` enforces the bound.
 - Not done: the macOS monitor and Windows backends (M6).
 
 ## Try it

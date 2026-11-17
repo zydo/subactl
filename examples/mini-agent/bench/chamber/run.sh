@@ -14,7 +14,14 @@ repo=$(cd "$here/../../../.." && pwd)
 arch=$(docker info --format '{{.Architecture}}' | sed 's/aarch64/arm64/; s/x86_64/amd64/')
 
 mkdir -p "$out" "$repo/bin-linux"
-(cd "$repo" && GOOS=linux GOARCH="$arch" go build -o bin-linux/ ./cmd/... ./examples/mini-agent/cmd/...)
+# Build the binaries here, or use the ones copied in from a machine that
+# has Go when this one does not.
+if command -v go >/dev/null; then
+  (cd "$repo" && GOOS=linux GOARCH="$arch" go build -o bin-linux/ ./cmd/... ./examples/mini-agent/cmd/...)
+elif [ ! -x "$repo/bin-linux/bench" ]; then
+  echo "no Go toolchain here and no prebuilt binaries in $repo/bin-linux" >&2
+  exit 1
+fi
 docker build -q -t subactl-radix-env "$here" >/dev/null
 docker volume create subactl-radix-check >/dev/null
 

@@ -946,14 +946,15 @@ func TestIntegrationF27MultiLeadIsolation(t *testing.T) {
 	if n != 40 {
 		t.Fatalf("only %d of 40 tasks completed next to the noisy lead", n)
 	}
-	// The design's bound is 20%. It could not be decided on the machines
-	// this was developed on, which are virtual: there the measured rise was
-	// 50% (Docker Desktop, 10 virtual CPUs) and 82% (VirtualBox, 6), but on
-	// the second a task slowed by 143% with no cgroups at all and a CPU
-	// left free, merely because five others were busy. Virtual CPUs that
-	// are not independent make the bound unmeasurable; it needs bare
-	// metal. So the bound is enforced only on request, and a rise beyond
-	// 2x, which would mean the weights do nothing, always fails.
+	// The design's bound is 20%. On bare metal it is met with room to
+	// spare: on sixteen identical cores the rise was 1% to 2% in four runs,
+	// and 9% with fast and slow cores mixed. On virtual machines it cannot
+	// be measured: there the rise was 50% (Docker Desktop, 10 virtual CPUs)
+	// and 82% (VirtualBox, 6), but on the second a task slowed by 143% with
+	// no cgroups at all and a CPU left free, merely because five others
+	// were busy. Virtual CPUs are not independent. So the bound is enforced
+	// only on request, for a machine where it means something, and a rise
+	// beyond 2x, which would mean the weights do nothing, always fails.
 	rise := float64(contended)/float64(alone) - 1
 	if os.Getenv("SUBACTL_F27_STRICT") != "" && rise > 0.20 {
 		t.Fatalf("p95 rose from %dms to %dms (%.0f%%), more than the 20%% the design allows", alone, contended, 100*rise)
@@ -962,7 +963,7 @@ func TestIntegrationF27MultiLeadIsolation(t *testing.T) {
 		t.Fatalf("p95 rose from %dms to %dms (%.0f%%): the leads are not isolated from each other", alone, contended, 100*rise)
 	}
 	if rise > 0.20 {
-		t.Logf("UNDECIDED: the design's bound for F27 is 20%%; measured %.0f%% (see the comment above on virtual CPUs)", 100*rise)
+		t.Logf("above the design's 20%% bound for F27: measured %.0f%%. Expected on virtual CPUs; see the comment above", 100*rise)
 	}
 
 	// The control plane is separate too, when the leads have different owners.
