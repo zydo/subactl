@@ -217,7 +217,7 @@ planner 需要的所有数据，都来自 subactld 从 backend 读到的实测�
 **metrics 与追溯**：
 
 - **Prometheus `GET /metrics`**：有效容量、已分配额度、外部占用、各终止码计数、兜底终止次数、按 reason 统计的准入拒绝次数、各 kind 的用量分布（histogram）。按 Prometheus 文本格式手写输出，不依赖 client\_golang。label 只用 kind、depth、code，不用 lease id 或 lead id：两者都持续创建销毁，会让序列数爆炸。单个 lease 的数据走下面的时间线。
-- **per-lease 时间线**：subactld 为每个存活 lease 在内存里保留 1 秒粒度的 ring buffer（默认 10 分钟），同时降采样到 5 秒，与审计日志一起落盘为 JSONL。`subactl trace <lease>` 重建完整时间线：spawn → 内存与 CPU 曲线 → 事件 → 注入的控制消息 → 工具调用信标 → 终止码与证据。实现：已结束 lease 的 1 秒粒度时间线在内存里再保留最近 1024 个，更早的从审计日志按 5 秒粒度重建；每个 lease 最多保留 500 个事件；`--tree` 未实现，用 `subactl ls` 看子树。trace 另附 `spikes`：把内存增长达到 64MiB 的区间归到当时那次工具调用的信标（实现）。
+- **per-lease 时间线**：subactld 为每个存活 lease 在内存里保留 1 秒粒度的 ring buffer（默认 10 分钟），同时降采样到 5 秒，与审计日志一起落盘为 JSONL。`subactl trace <lease>` 重建完整时间线：spawn → 内存与 CPU 曲线 → 事件 → 注入的控制消息 → 工具调用信标 → 终止码与证据。实现：已结束 lease 的 1 秒粒度时间线在内存里再保留最近 1024 个，更早的从审计日志按 5 秒粒度重建；每个 lease 最多保留 500 个事件；`--tree` 把整棵子树（含已结束的 lease，从内存或审计日志中找回）作为 `children` 一并返回。trace 另附 `spikes`：把内存增长达到 64MiB 的区间归到当时那次工具调用的信标（实现）。
 - **工具调用叠加**：进度信标带上工具名与序号（不带参数，以防注入和泄露），trace 把它们叠加在用量曲线上，直接回答"哪一次 bash 调用让内存涨了 4GB"。这是分析 agent 行为最有价值的一项。
 - **`subactl top`**：类似 htop 的 TUI，显示各 lead 的 agent 树、每个节点的用量与配额进度条、状态（working / awaiting\_input / done）和最近事件。它是 API 的普通客户端，与具体 harness 无关。实现：进度条到 90% 时改用另一种字符；长时间无信标的节点标出静默时长；`--once` 打印一帧后退出。为此 lease 对象增加了 `activity` 字段（最后一次信标）。
 - **自报数据**：LLM token 用量 subactld 测不到，只能由 adapter 上报，记录时标为 `self_reported`，与实测数据分开。
@@ -797,7 +797,7 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 **API 与 CLI**
 - 大小以字节整数传输；`{id}` 可写作 `self`；错误体带出错字段、期望值和示例；未知字段使整个请求被拒绝。
 - 新增拒绝原因 `below_allocated`，新增 403 `self_resize_forbidden`。
-- `wait-children` 增加 `self` 与 `timeout_seconds`；`available` 可用 `?kind=`；`kill`、`terminate`、`notify`、`spawn` 都支持 `dry_run`。
+- `wait-children` 增加 `self` 与 `timeout_seconds`；`trace` 可带 `?tree=true`；`available` 可用 `?kind=`；`kill`、`terminate`、`notify`、`spawn` 都支持 `dry_run`。
 - lease 对象增加 `scratch` 与 `activity` 字段，用量增加 `oom_events`。
 - attach 用 `Upgrade: subactl-pty` 和自定义帧格式；attach 之前的终端输出缓存 64KB。
 - 不带 `-it` 的 `subactl run` 实时显示 lead 的输出，终止记录写 stderr。

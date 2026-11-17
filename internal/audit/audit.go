@@ -161,6 +161,28 @@ func Read(dir string, lease api.LeaseID) ([]Record, error) {
 	return out, nil
 }
 
+// Parents returns, for every lease in the log, the lease it was started
+// under; leads are not listed. It is how a subtree is found again after
+// its leases have ended.
+func Parents(dir string) (map[api.LeaseID]api.LeaseID, error) {
+	files, err := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+	if err != nil {
+		return nil, err
+	}
+	out := map[api.LeaseID]api.LeaseID{}
+	for _, name := range files {
+		err := scan(name, func(r Record) {
+			if len(r.Path) > 1 {
+				out[r.Path[0]] = r.Path[1]
+			}
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 func scan(name string, fn func(Record)) error {
 	f, err := os.Open(name)
 	if err != nil {

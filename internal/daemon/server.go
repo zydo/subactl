@@ -315,7 +315,11 @@ func (s *Server) waitChildren(w http.ResponseWriter, r *http.Request, c Caller) 
 func (r Route) String() string { return fmt.Sprintf("%s %s %s", r.ID, r.Method, r.Path) }
 
 func (s *Server) getTrace(w http.ResponseWriter, r *http.Request, c Caller) error {
-	tr, err := s.m.Trace(c, leaseID(r))
+	trace := s.m.Trace
+	if tree, _ := strconv.ParseBool(r.URL.Query().Get("tree")); tree {
+		trace = s.m.TraceTree
+	}
+	tr, err := trace(c, leaseID(r))
 	if err != nil {
 		return err
 	}

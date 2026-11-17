@@ -606,10 +606,16 @@ func (c *cli) trace(ctx context.Context, args []string) (int, error) {
 	if err != nil {
 		return 2, err
 	}
-	if err := c.flags("trace").Parse(rest); err != nil {
+	fs := c.flags("trace")
+	tree := fs.Bool("tree", false, "include the timelines of the whole subtree, ended leases too")
+	if err := fs.Parse(rest); err != nil {
 		return 2, err
 	}
-	tr, err := c.api.Trace(ctx, id)
+	get := c.api.Trace
+	if *tree {
+		get = c.api.TraceTree
+	}
+	tr, err := get(ctx, id)
 	if err != nil {
 		return 1, err
 	}

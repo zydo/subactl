@@ -281,6 +281,13 @@ paths:
     get:
       operationId: getTrace
       summary: Timeline of the lease. Usage series, events, injected control messages, tool beacons, termination.
+      parameters:
+        - name: tree
+          in: query
+          required: false
+          description: Include the timelines of the whole subtree, ended leases too, as children.
+          schema:
+            type: boolean
       responses:
         '200':
           description: The timeline.
@@ -777,6 +784,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Spike'
+        children:
+          description: The children's timelines, when the subtree was asked for.
+          type: array
+          items:
+            $ref: '#/components/schemas/Trace'
     Spike:
       description: The memory growth during one tool call, from its progress beacon to the next.
       type: object

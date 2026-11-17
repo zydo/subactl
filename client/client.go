@@ -176,6 +176,13 @@ func (c *Client) Trace(ctx context.Context, id api.LeaseID) (api.Trace, error) {
 	return out, c.do(ctx, opGetTrace, id, nil, nil, &out)
 }
 
+// TraceTree returns the timeline of a lease with those of its whole
+// subtree, ended leases included, as children.
+func (c *Client) TraceTree(ctx context.Context, id api.LeaseID) (api.Trace, error) {
+	var out api.Trace
+	return out, c.do(ctx, opGetTrace, id, url.Values{"tree": {"true"}}, nil, &out)
+}
+
 // Metrics returns the Prometheus metrics as text.
 func (c *Client) Metrics(ctx context.Context) (string, error) {
 	resp, err := c.open(ctx, opGetMetrics, "")

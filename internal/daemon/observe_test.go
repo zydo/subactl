@@ -448,6 +448,14 @@ func TestAuditSuggestTraceMetrics(t *testing.T) {
 		if _, err := w.m.Trace(Caller{UID: 502}, lastID); err == nil {
 			t.Fatal("another user read the trace")
 		}
+		// The whole tree: the live lead with its twenty ended workers.
+		tree, err := w.m.TraceTree(operator, leadID)
+		if err != nil || len(tree.Children) != 20 || tree.Children[0].Termination == nil {
+			t.Fatalf("tree of %d children, %v", len(tree.Children), err)
+		}
+		if tree, err := w.m.TraceTree(Caller{UID: 502}, leadID); err == nil {
+			t.Fatalf("another user read the tree: %d children", len(tree.Children))
+		}
 		text := w.m.MetricsText()
 		for _, want := range []string{`subactl_terminations_total{code="200"} 20`, `subactl_live_leases{depth="0"} 1`, `subactl_lease_peak_bytes_count{kind="worker"} 20`, "subactl_effective_capacity_bytes 25769803776"} {
 			if !strings.Contains(text, want) {
@@ -474,6 +482,16 @@ func TestAuditSuggestTraceMetrics(t *testing.T) {
 	if _, err := m.Trace(Caller{UID: 502}, lastID); err == nil {
 		t.Fatal("another user read the trace from the audit log")
 	}
+	// The tree too, from the audit log alone.
+	tree, err := m.TraceTree(operator, leadID)
+	if err != nil || len(tree.Children) != 20 {
+		t.Fatalf("tree from the audit log: %d children, %v", len(tree.Children), err)
+	}
+	for _, c := range tree.Children {
+		if c.Termination == nil || c.Termination.Code != api.CodeCompleted {
+			t.Fatalf("child %s without its end: %+v", c.Lease, c.Termination)
+		}
+	}
 	if _, err := m.Trace(operator, "ls_never"); err == nil {
 		t.Fatal("a trace for a lease that never existed")
 	}
@@ -482,7 +500,6 @@ func TestAuditSuggestTraceMetrics(t *testing.T) {
 	if s := a.Suggest["worker"]; s.Samples != 20 || s.Default {
 		t.Fatalf("history was not reloaded: %+v", s)
 	}
-	_ = leadID
 }
 
 // F32: with the audit directory unwritable, warnings and kills are as

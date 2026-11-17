@@ -501,6 +501,59 @@ func spikes(samples []api.Usage, events []api.Event) []api.Spike {
 	return out
 }
 
+// TraceTree is Trace with the timelines of the whole subtree as children,
+// ended leases included: live ones are found in the ledger, recently ended
+// ones in memory, older ones in the audit log.
+func (m *Manager) TraceTree(c Caller, id api.LeaseID) (api.Trace, error) {
+	if id == api.Self && c.Lease != "" {
+		id = c.Lease
+	}
+	root, err := m.Trace(c, id)
+	if err != nil {
+		return api.Trace{}, err
+	}
+	parent := map[api.LeaseID]api.LeaseID{}
+	if m.cfg.AuditDir != "" {
+		if p, err := audit.Parents(m.cfg.AuditDir); err == nil {
+			parent = p
+		}
+	}
+	m.obs.mu.Lock()
+	for lid, l := range m.obs.leases {
+		if l.term != nil && l.term.Parent != "" {
+			parent[lid] = l.term.Parent
+		}
+	}
+	m.obs.mu.Unlock()
+	for _, ls := range m.led.Subtree(id) {
+		if ls.Parent != "" {
+			parent[ls.ID] = ls.Parent
+		}
+	}
+	children := map[api.LeaseID][]api.LeaseID{}
+	for child, p := range parent {
+		children[p] = append(children[p], child)
+	}
+	var build func(tr *api.Trace, depth int)
+	build = func(tr *api.Trace, depth int) {
+		kids := children[tr.Lease]
+		sort.Slice(kids, func(i, j int) bool { return kids[i] < kids[j] })
+		for _, k := range kids {
+			if depth > 64 {
+				return // a cycle would be a bug elsewhere; never loop for it
+			}
+			ct, err := m.Trace(c, k)
+			if err != nil {
+				continue // forgotten everywhere, or not the caller's to see
+			}
+			build(&ct, depth+1)
+			tr.Children = append(tr.Children, ct)
+		}
+	}
+	build(&root, 0)
+	return root, nil
+}
+
 func (m *Manager) auditRecords(id api.LeaseID) []audit.Record {
 	if m.cfg.AuditDir == "" {
 		return nil

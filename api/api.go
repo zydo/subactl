@@ -408,6 +408,9 @@ type Trace struct {
 	// SpikeMin, largest growth first: what the timeline says about where
 	// a jump in memory came from.
 	Spikes []Spike `json:"spikes,omitempty"`
+	// Children are the timelines of the lease's children, each with its
+	// own children, when the whole subtree was asked for.
+	Children []Trace `json:"children,omitempty"`
 }
 
 // Spike is the memory growth during one tool call: from its progress
