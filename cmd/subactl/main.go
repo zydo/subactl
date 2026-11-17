@@ -286,8 +286,19 @@ func (c *cli) start(ctx context.Context, name string, args []string) (int, error
 		return 0, nil
 	}
 	// From here on the lease exists. If this process is interrupted while it
-	// waits, the lease is killed rather than left behind.
-	cleanup := func() { _, _ = c.api.Kill(context.Background(), ls.ID) }
+	// waits, the lease must not be left behind. For a lead this process is
+	// the holder: where the backend detects a holder's death exactly, going
+	// away is all it takes, and the tree is reaped as 502 PARENT_DIED, the
+	// same as when the terminal is closed. Everywhere else the lease is
+	// killed explicitly.
+	cleanup := func() {
+		if name == "run" {
+			if h, err := c.api.Host(context.Background()); err == nil && h.Capabilities.ParentDeath == api.LevelHard && h.Backend != "fake" {
+				return
+			}
+		}
+		_, _ = c.api.Kill(context.Background(), ls.ID)
+	}
 	cwd, _ := os.Getwd()
 	if _, err := c.api.Spawn(ctx, ls.ID, api.SpawnRequest{Argv: argv, Env: os.Environ(), Dir: cwd}); err != nil {
 		cleanup()
