@@ -241,8 +241,10 @@ func eventually(t *testing.T, within time.Duration, what string, ok func() bool)
 	}
 }
 
-// hog allocates memory without end: tail buffers a stream with no newline.
-const hog = "exec tail /dev/zero"
+// hog allocates memory without end, by growing a string in awk. (It used
+// to be "tail /dev/zero", but uutils' tail splices /dev/zero straight into
+// a pipe on stdout, which is an output flood and not a memory leak.)
+const hog = `exec awk 'BEGIN { s = "x"; while (1) s = s s }'`
 
 // F14: nested leases; the parent's own processes sit in the _self leaf, so
 // creating a nested lease never fails with EBUSY; a child's usage counts
@@ -602,6 +604,17 @@ func (m *Manager) mustRun(t *testing.T, c Caller, envl api.Envelope, script stri
 	return ls.ID
 }
 
+// A command that floods its output as fast as it can is ended for its
+// output (414), not for its memory: what it wrote is not charged to it.
+func TestIntegrationOutputFloodIsNotMemory(t *testing.T) {
+	e := newEnv(t)
+	id := e.m.mustRun(t, e.op, api.Envelope{Memory: 64 * mib, Output: 4 * mib}, "exec yes subactl")
+	term := e.wait(id, 10*time.Second)
+	if term.Code != api.CodeOutputExceeded || term.Peak > 32*mib {
+		t.Fatalf("ended with %d %s at a peak of %d bytes: %+v", term.Code, term.Name, term.Peak, term.Evidence)
+	}
+}
+
 // F11 and the 408 half of F10: a lease that writes past its output limit
 // is killed as a whole with 414, having written no more than the limit
 // plus about one tick of output; a lease past its wall time ends with 408.
@@ -629,8 +642,10 @@ func TestIntegrationF11OutputAndWall(t *testing.T) {
 	if term.Code != api.CodeOutputExceeded || term.Dimension != "output" {
 		t.Fatalf("%+v", term)
 	}
-	if size <= limit || size > limit+16*mib {
-		t.Fatalf("the lease wrote %d bytes against a limit of %d; want the limit plus at most about one second of output", size, limit)
+	// The output goes through the daemon, which stops at the limit: the
+	// file holds the limit, not a second's worth of flooding beyond it.
+	if size != limit {
+		t.Fatalf("the output file holds %d bytes against a limit of %d", size, limit)
 	}
 	if left := pidsWith("sleep 31337.5"); len(left) != 0 {
 		t.Fatalf("descendants survived the output kill: %v", left)
@@ -771,7 +786,7 @@ func TestIntegrationF8SafetyNet(t *testing.T) {
 	// The external load: a process in the outer cgroup, outside every lease.
 	// The leases use about 200MiB; with 310MiB more, about 130MiB is left.
 	external := exec.Command("/bin/sh", "-c", hold(296*mib))
-	external.Env = []string{agentPath(), "SUBACTL_SCRATCH=/tmp"}
+	external.Env = []string{agentPath(), "SUBACTL_SCRATCH=" + t.TempDir()}
 	leaf, err := os.Open(filepath.Join(e.outer, "external"))
 	if err != nil {
 		t.Fatal(err)
@@ -1064,10 +1079,7 @@ func TestIntegrationF10TerminationCodes(t *testing.T) {
 
 	check("over its wall time", e.m.mustRun(t, e.op, api.Envelope{Memory: 32 * mib, Wall: 1}, "exec sleep 600"), api.CodeWallExceeded, 10*time.Second)
 
-	// Written output sits in the page cache, which counts against the
-	// lease's memory: the memory limit is set well clear of the output one,
-	// so that only the output limit is in play.
-	check("over its output limit", e.m.mustRun(t, e.op, api.Envelope{Memory: 128 * mib, Output: mib}, "while :; do head -c 65536 /dev/zero | tr '\\0' x; done"), api.CodeOutputExceeded, 10*time.Second)
+	check("over its output limit", e.m.mustRun(t, e.op, api.Envelope{Memory: 32 * mib, Output: mib}, "while :; do head -c 65536 /dev/zero | tr '\\0' x; done"), api.CodeOutputExceeded, 10*time.Second)
 
 	escaper := e.run(e.op, 32*mib, "exec sleep 600")
 	main := e.m.runtime(escaper).proc.Pid()
@@ -1102,7 +1114,7 @@ func TestIntegrationF10TerminationCodes(t *testing.T) {
 	victim := e.run(e.op, 256*mib, hold(130*mib))
 	time.Sleep(3 * time.Second)
 	external := exec.Command("/bin/sh", "-c", hold(380*mib))
-	external.Env = []string{agentPath(), "SUBACTL_SCRATCH=/tmp"}
+	external.Env = []string{agentPath(), "SUBACTL_SCRATCH=" + t.TempDir()}
 	leaf, err := os.Open(filepath.Join(e.outer, "external"))
 	if err != nil {
 		t.Fatal(err)

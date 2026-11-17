@@ -66,8 +66,10 @@ type Backend struct {
 	cfg  Config
 	caps api.Capabilities
 
-	mu   sync.Mutex
-	dirs map[api.LeaseID]string // lease -> its cgroup directory
+	mu      sync.Mutex
+	dirs    map[api.LeaseID]string // lease -> its cgroup directory
+	outputs map[api.LeaseID]*output
+	limits  map[api.LeaseID]int64 // output limit, set before the output exists
 }
 
 type group struct {
@@ -99,7 +101,7 @@ func New(cfg Config) (*Backend, error) {
 	}
 	// Controllers must be delegated from the root down to the base. memory
 	// and pids are required; cpu is reported honestly if it is missing.
-	b := &Backend{cfg: cfg, dirs: map[api.LeaseID]string{}}
+	b := &Backend{cfg: cfg, dirs: map[api.LeaseID]string{}, outputs: map[api.LeaseID]*output{}, limits: map[api.LeaseID]int64{}}
 	hard := api.LevelHard
 	b.caps = api.Capabilities{
 		Membership: hard, Memory: hard, CPU: hard, Pids: hard, KillTree: hard,
@@ -280,6 +282,7 @@ func (b *Backend) Create(_ context.Context, lease api.LeaseID, parent backend.AC
 		return fail(err)
 	}
 	b.dirs[lease] = dir
+	b.limits[lease] = env.Output
 	return &group{lease: lease, dir: dir}, nil
 }
 
@@ -347,15 +350,31 @@ func (b *Backend) Spawn(_ context.Context, g backend.ACGroup, c backend.Cmd) (ba
 		}
 		return f, err
 	}
-	stdout, err := open("stdout")
+	stdoutFile, err := open("stdout")
 	if err != nil {
 		return nil, err
 	}
-	defer stdout.Close()
-	stderr, err := open("stderr")
+	stderrFile, err := open("stderr")
 	if err != nil {
+		stdoutFile.Close()
 		return nil, err
 	}
+	// The agent writes into pipes; the daemon carries them to the files.
+	outR, stdout, err := os.Pipe()
+	if err != nil {
+		stdoutFile.Close()
+		stderrFile.Close()
+		return nil, err
+	}
+	errR, stderr, err := os.Pipe()
+	if err != nil {
+		stdoutFile.Close()
+		stderrFile.Close()
+		outR.Close()
+		stdout.Close()
+		return nil, err
+	}
+	defer stdout.Close() // the agent holds its own copies of the write ends
 	defer stderr.Close()
 	leaf, err := os.Open(filepath.Join(dir, selfLeaf))
 	if err != nil {
@@ -410,7 +429,23 @@ func (b *Backend) Spawn(_ context.Context, g backend.ACGroup, c backend.Cmd) (ba
 		if master != nil {
 			master.Close()
 		}
+		for _, f := range []*os.File{outR, errR, stdoutFile, stderrFile} {
+			f.Close()
+		}
 		return nil, fmt.Errorf("cgroup2: spawn in %s: %w", lease, err)
+	}
+	b.mu.Lock()
+	out := newOutput(b.limits[lease])
+	b.outputs[lease] = out
+	b.mu.Unlock()
+	if master != nil {
+		// A lead writes to its terminal; the pipes carry nothing.
+		for _, f := range []*os.File{outR, errR, stdoutFile, stderrFile} {
+			f.Close()
+		}
+	} else {
+		out.carry(outR, stdoutFile)
+		out.carry(errR, stderrFile)
 	}
 	return &proc{cmd: cmd, tty: master}, nil
 }
@@ -496,13 +531,13 @@ func (b *Backend) RemoveScratch(lease api.LeaseID) error {
 
 // OutputBytes is the size of the lease's stdout and stderr files.
 func (b *Backend) OutputBytes(_ context.Context, g backend.ACGroup) (int64, error) {
-	var n int64
-	for _, name := range []string{"stdout", "stderr"} {
-		if info, err := os.Stat(filepath.Join(b.ScratchDir(g.Ref().Lease), name)); err == nil {
-			n += info.Size()
-		}
+	b.mu.Lock()
+	out := b.outputs[g.Ref().Lease]
+	b.mu.Unlock()
+	if out == nil {
+		return 0, nil
 	}
-	return n, nil
+	return out.read.Load(), nil
 }
 
 // SetLimits applies a changed envelope.
@@ -514,6 +549,12 @@ func (b *Backend) SetLimits(_ context.Context, g backend.ACGroup, env api.Envelo
 	if err := limits(dir, env, b.caps.CPU == api.LevelHard); err != nil {
 		return fmt.Errorf("cgroup2: set limits of %s: %w", g.Ref().Lease, err)
 	}
+	b.mu.Lock()
+	b.limits[g.Ref().Lease] = env.Output
+	if out := b.outputs[g.Ref().Lease]; out != nil {
+		out.limit.Store(env.Output)
+	}
+	b.mu.Unlock()
 	return nil
 }
 
@@ -560,8 +601,14 @@ func (b *Backend) Destroy(_ context.Context, g backend.ACGroup) error {
 		}
 		if rerr == nil || errors.Is(rerr, fs.ErrNotExist) {
 			b.mu.Lock()
+			out := b.outputs[g.Ref().Lease]
 			delete(b.dirs, g.Ref().Lease)
+			delete(b.outputs, g.Ref().Lease)
+			delete(b.limits, g.Ref().Lease)
 			b.mu.Unlock()
+			if out != nil {
+				out.close() // every process is gone; the files are complete
+			}
 			return nil
 		}
 		if !errors.Is(rerr, syscall.EBUSY) {
