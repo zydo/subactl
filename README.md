@@ -48,7 +48,9 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
   kills a lease that is over its limit one sample late. It reports every
   capability as soft or monitor_only and escape prevention as unsupported,
   so a request that requires hard enforcement is refused. `subactld` runs
-  there as an ordinary user.
+  there as an ordinary user. The effective capacity follows the kernel's
+  own memory-pressure figure, in whole percent and after compression, so
+  it moves less than the memory other programs allocate.
 - Not done: the Windows backend, which is deferred.
 
 ## Try it

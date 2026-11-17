@@ -120,6 +120,8 @@ func run() error {
 		host = capacity.CgroupReader{Dir: *capacityCgroup}
 	case goruntime.GOOS == "linux":
 		host = capacity.MeminfoReader{Path: "/proc/meminfo"}
+	case goruntime.GOOS == "darwin":
+		host = darwinHost()
 	}
 	var total int64
 	if host != nil {
