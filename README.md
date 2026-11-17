@@ -43,14 +43,21 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
   be measured, because their CPUs are not independent: there a task slows
   far more than that with no cgroups at all. `SUBACTL_F27_STRICT=1 make
   integration` enforces the bound.
-- Not done: the macOS monitor and Windows backends (M6).
+- **M6, macOS: done, as monitoring only.** The `darwin` backend keeps a
+  membership table from the process table, samples physical footprint and
+  kills a lease that is over its limit one sample late. It reports every
+  capability as soft or monitor_only and escape prevention as unsupported,
+  so a request that requires hard enforcement is refused. `subactld` runs
+  there as an ordinary user.
+- Not done: the Windows backend, which is deferred.
 
 ## Try it
 
 ```sh
 make build
 export SUBACTL_SOCK=/tmp/subactl.sock
-bin/subactld --backend fake --capacity 24G &   # on Linux as root, drop --backend fake
+bin/subactld --backend fake --capacity 24G &   # a dry run: nothing is started or enforced
+# For real: on Linux as root, "sudo bin/subactld"; on macOS, "bin/subactld".
 bin/subactl host
 bin/subactl run --wait=false --memory 8G -- agent     # prints the lead lease
 bin/subactl spawn --parent <lead> --memory 2G -- worker

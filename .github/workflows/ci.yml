@@ -17,3 +17,13 @@ jobs:
       - run: make test
       - run: make build
       - run: make integration
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # Includes the macOS backend's tests, which start real processes.
+      - run: make test
+      - run: make build

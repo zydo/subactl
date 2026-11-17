@@ -22,6 +22,7 @@ import (
 	"github.com/zydo/subactl/internal/audit"
 	"github.com/zydo/subactl/internal/backend"
 	"github.com/zydo/subactl/internal/backend/cgroup2"
+	"github.com/zydo/subactl/internal/backend/darwinmon"
 	"github.com/zydo/subactl/internal/capacity"
 	"github.com/zydo/subactl/internal/daemon"
 	"github.com/zydo/subactl/internal/hostmem"
@@ -39,6 +40,14 @@ func main() {
 	}
 }
 
+// defaultBackend is the real backend of the platform.
+func defaultBackend() string {
+	if goruntime.GOOS == "darwin" {
+		return "darwin"
+	}
+	return "cgroup2"
+}
+
 func envOr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -48,7 +57,7 @@ func envOr(key, def string) string {
 
 func run() error {
 	socket := flag.String("socket", client.SocketFromEnv(), "Unix socket to listen on")
-	backendName := flag.String("backend", "cgroup2", "enforcement backend: cgroup2 or fake")
+	backendName := flag.String("backend", defaultBackend(), "enforcement backend: cgroup2 (Linux), darwin (macOS, monitoring only) or fake")
 	capacityFlag := flag.String("capacity", "", "cap on the effective capacity, e.g. 24G (default: total memory minus the reserve)")
 	reserveFlag := flag.String("reserve", "", "memory kept for the system, e.g. 8G (default: the larger of 15% and 8G)")
 	cgroupBase := flag.String("cgroup", "/sys/fs/cgroup/subactl", "cgroup under which every lease lives (cgroup2 backend)")
@@ -72,8 +81,15 @@ func run() error {
 		if err != nil {
 			return err
 		}
+	case "darwin":
+		var err error
+		be, err = darwinmon.New(darwinmon.Config{StateDir: *stateDir, Socket: *socket})
+		if err != nil {
+			return err
+		}
+		log.Warn("the macOS backend only monitors: limits are applied after the fact and a process can escape them")
 	default:
-		return fmt.Errorf("unknown backend %q: want cgroup2 or fake", *backendName)
+		return fmt.Errorf("unknown backend %q: want cgroup2, darwin or fake", *backendName)
 	}
 
 	// What "the machine" is: an outer cgroup when told so, the whole host

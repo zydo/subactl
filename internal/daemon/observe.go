@@ -192,6 +192,7 @@ func (m *Manager) sampleAll(ctx context.Context) map[api.LeaseID]int64 {
 	}
 	m.mu.Unlock()
 	meter, _ := m.be.(backend.OutputMeter)
+	monitorOnly := m.be.Capabilities().Memory == api.LevelMonitorOnly
 	usage := make(map[api.LeaseID]int64, len(live))
 	for _, r := range live {
 		ls, ok := m.led.Get(r.id)
@@ -204,6 +205,12 @@ func (m *Manager) sampleAll(ctx context.Context) map[api.LeaseID]int64 {
 		}
 		usage[r.id] = u.Memory
 		m.observeSample(ctx, ls, u)
+		// A backend that can only monitor memory has no kernel limit to
+		// rely on: the daemon is the limit, one sample late.
+		if monitorOnly && u.Memory > ls.Envelope.Memory {
+			go m.reap(r.id, api.CodeOOMLeaseLimit, map[string]any{"detected_by": "sampling", "usage": u.Memory})
+			continue
+		}
 		if !r.running {
 			continue
 		}
