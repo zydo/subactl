@@ -90,6 +90,10 @@ env:
 	}
 }
 
+// The workers start their servers about 2s in and keep them through a 4s
+// verification step; the limit hits at 4s, in the middle of that window
+// with two seconds to spare on either side for a slow machine.
+//
 // G4, the defect the design sets out to contain: at the usage limit the
 // harness kills each subagent's pid and nothing else, so the dev servers
 // and browsers those subagents had started become orphans. The lead then
@@ -100,13 +104,14 @@ seed: 7
 task: toy
 fanout: 6
 depth: 1
-duration: 9s
+duration: 13s
 fanout_at: 500ms
-quota_at: 2750ms
+quota_at: 4s
 quota_for: 1s
 env:
   TOY_PACKAGES: 6
   TOY_STEP: 0.5
+  TOY_TEST_STEP: 4
   TOY_SERVER_LIFE: 60
 `)
 	wantAllOK(t, results, 6)
