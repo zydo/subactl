@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -237,8 +238,23 @@ func run() int {
 			printer.Line(fmt.Sprintf("usage limit: killed subagent %s (pid %d)", k.Task, k.Pid))
 		}
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	// SIGTERM ends the agent. Ctrl-C (SIGINT) first interrupts the turn in
+	// progress and returns to the prompt; a second one, with no turn in
+	// progress or before the interrupted turn has wound down, ends the agent.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
 	defer stop()
+	turns := &turnControl{root: ctx, quit: stop}
+	sigint := make(chan os.Signal, 1)
+	signal.Notify(sigint, os.Interrupt)
+	defer signal.Stop(sigint)
+	go func() {
+		for range sigint {
+			if !turns.interrupt() {
+				stop()
+				return
+			}
+		}
+	}()
 	if sc.QuotaFor > 0 {
 		// The limit is account-wide and arrives whatever the planner is
 		// doing, including while it waits for its workers in a tool call.
@@ -269,8 +285,12 @@ func run() int {
 		OnEvent: printer.Event,
 		OnQuota: func(context.Context) (time.Duration, bool) {
 			killSubagents()
-			if !lead {
-				return 0, false // a subagent cannot outwait the limit
+			// A subagent cannot outwait the limit. With a real provider the
+			// lead does not try either: the limit may last hours, and
+			// asking again every second only adds to the account's
+			// traffic. The user is told and decides.
+			if !lead || real {
+				return 0, false
 			}
 			return max(sc.QuotaAt+sc.QuotaFor-clock(), 0) + time.Second, true
 		},
@@ -280,24 +300,51 @@ func run() int {
 	}
 	switch {
 	case !real:
-		err = a.Run(ctx, "Carry out the task: "+label)
+		err = turns.run(func(tc context.Context) error { return a.Run(tc, "Carry out the task: "+label) })
 	case !lead:
-		err = a.Run(ctx, *task)
+		err = turns.run(func(tc context.Context) error { return a.Run(tc, *task) })
 	case *prompt != "" || flag.NArg() > 0:
-		err = a.Run(ctx, strings.TrimSpace(*prompt+" "+strings.Join(flag.Args(), " ")))
+		err = turns.run(func(tc context.Context) error {
+			return a.Run(tc, strings.TrimSpace(*prompt+" "+strings.Join(flag.Args(), " ")))
+		})
 	default:
-		// The line-mode terminal: one line in, the agent's turn out.
-		in := bufio.NewScanner(os.Stdin)
+		// The line-mode terminal: one line in, the agent's turn out. Lines
+		// are read on their own goroutine so that a Ctrl-C at the prompt,
+		// which ends the agent, is not held up by a read that never returns.
+		lines := make(chan string)
+		go func() {
+			in := bufio.NewScanner(os.Stdin)
+			for in.Scan() {
+				lines <- in.Text()
+			}
+			close(lines)
+		}()
 		for err == nil {
 			if adapter != nil {
 				adapter.AwaitingInput(ctx)
 			}
 			fmt.Print("> ")
-			if !in.Scan() {
+			var line string
+			var ok bool
+			select {
+			case <-ctx.Done():
+				fmt.Println()
+				err = ctx.Err()
+			case line, ok = <-lines:
+			}
+			if err != nil || !ok {
 				break
 			}
-			if line := strings.TrimSpace(in.Text()); line != "" {
-				err = a.Run(ctx, line)
+			if line = strings.TrimSpace(line); line != "" {
+				err = turns.run(func(tc context.Context) error { return a.Run(tc, line) })
+				switch {
+				case errors.Is(err, errInterrupted):
+					printer.Line("interrupted; press Ctrl-C again to quit")
+					err = nil
+				case real && errors.Is(err, llm.ErrQuota):
+					printer.Line("the provider's usage limit was reached; this turn was not finished. Try again later, or start mini-agent with another --provider")
+					err = nil
+				}
 			}
 		}
 	}
@@ -326,7 +373,7 @@ func run() int {
 		printer.Line("giving up: " + err.Error())
 		report(agent.Result{Task: workName, Status: "failed", Detail: "context_overflow"})
 		return exitFailed
-	case errors.Is(err, context.Canceled):
+	case errors.Is(err, context.Canceled), errors.Is(err, errInterrupted):
 		return 130
 	case err != nil:
 		report(agent.Result{Task: workName, Status: "failed", Detail: err.Error()})
@@ -476,3 +523,47 @@ When this runs under subactl, every agent has a hard memory limit and its childr
 If you receive a message marked "[subactl control message ...] TERMINATE_REQUESTED", save your progress, end your children and stop.
 
 Be brief. When the task is done, say what you did and what is left.`
+
+// errInterrupted is what a turn returns when Ctrl-C cut it short.
+var errInterrupted = errors.New("interrupted")
+
+// turnControl runs one turn at a time under a context of its own, so that
+// Ctrl-C can cancel the turn without ending the agent.
+type turnControl struct {
+	root context.Context
+	quit func()
+
+	mu     sync.Mutex
+	cancel context.CancelFunc // of the turn in progress, or nil
+}
+
+// run runs one turn. A turn cancelled by interrupt returns errInterrupted.
+func (t *turnControl) run(turn func(context.Context) error) error {
+	ctx, cancel := context.WithCancel(t.root)
+	t.mu.Lock()
+	t.cancel = cancel
+	t.mu.Unlock()
+	err := turn(ctx)
+	t.mu.Lock()
+	interrupted := t.cancel == nil // interrupt cleared it
+	t.cancel = nil
+	t.mu.Unlock()
+	cancel()
+	if interrupted && t.root.Err() == nil {
+		return errInterrupted
+	}
+	return err
+}
+
+// interrupt cancels the turn in progress and reports true, or reports
+// false when there is none, which means the agent should end.
+func (t *turnControl) interrupt() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.cancel == nil {
+		return false
+	}
+	t.cancel()
+	t.cancel = nil
+	return true
+}

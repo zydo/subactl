@@ -146,6 +146,10 @@ func (a *Agent) Run(ctx context.Context, prompt string) error {
 				terr = fmt.Errorf("unknown tool %q; the tools are read, write, edit and bash", call.Name)
 			}
 			if ctx.Err() != nil {
+				// Interrupted mid-turn. Every call the model made must still
+				// get a result, or the conversation cannot go on: this one
+				// and the ones not started are answered as interrupted.
+				a.interrupted(results, calls, call.ID)
 				return ctx.Err()
 			}
 			if terr != nil {
@@ -164,6 +168,22 @@ func (a *Agent) Run(ctx context.Context, prompt string) error {
 			a.AfterTurn(ctx, turn)
 		}
 	}
+}
+
+// interrupted closes a turn that was cut short: the call with id from and
+// every call after it get a result saying so, and the results are added to
+// the conversation.
+func (a *Agent) interrupted(results llm.Message, calls []llm.Block, from string) {
+	cut := false
+	for _, c := range calls {
+		if c.ID == from {
+			cut = true
+		}
+		if cut {
+			results.Blocks = append(results.Blocks, llm.Block{Type: llm.BlockToolResult, ToolUseID: c.ID, Text: "[interrupted by the user before this finished]", IsError: true})
+		}
+	}
+	a.messages = append(a.messages, results)
 }
 
 func userText(s string) llm.Message {

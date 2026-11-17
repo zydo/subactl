@@ -141,3 +141,50 @@ func TestRegistryKillChildren(t *testing.T) {
 		t.Fatalf("results %+v", rs)
 	}
 }
+
+type slowTool struct{}
+
+func (slowTool) Spec() llm.Tool { return llm.Tool{Name: "slow"} }
+func (slowTool) Run(ctx context.Context, _ json.RawMessage) (string, error) {
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case <-time.After(10 * time.Second):
+		return "finished", nil
+	}
+}
+
+// An interrupted turn leaves a conversation that can go on: every tool
+// call of the cut-short turn has a result, the one in progress and the
+// ones never started alike.
+func TestInterruptClosesOpenCalls(t *testing.T) {
+	a := &Agent{
+		Brain: &twoCalls{},
+		Tools: []tools.Tool{slowTool{}},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { time.Sleep(50 * time.Millisecond); cancel() }()
+	if err := a.Run(ctx, "go"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err %v", err)
+	}
+	msgs := a.Transcript()
+	last := msgs[len(msgs)-1]
+	if last.Role != "user" || len(last.Blocks) != 2 {
+		t.Fatalf("last message %+v", last)
+	}
+	for i, b := range last.Blocks {
+		if b.Type != llm.BlockToolResult || !b.IsError || b.ToolUseID != []string{"t1", "t2"}[i] {
+			t.Fatalf("result %d: %+v", i, b)
+		}
+	}
+}
+
+// twoCalls asks for two slow tool calls in one turn.
+type twoCalls struct{}
+
+func (twoCalls) Stream(context.Context, llm.Request, func(string)) (llm.Message, error) {
+	return llm.Message{Role: "assistant", Blocks: []llm.Block{
+		{Type: llm.BlockToolUse, ID: "t1", Name: "slow", Input: json.RawMessage(`{}`)},
+		{Type: llm.BlockToolUse, ID: "t2", Name: "slow", Input: json.RawMessage(`{}`)},
+	}}, nil
+}
