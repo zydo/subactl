@@ -22,6 +22,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/zydo/subactl/api"
 	"github.com/zydo/subactl/client"
 	"github.com/zydo/subactl/examples/mini-agent/agent"
@@ -420,6 +422,11 @@ func wrap(sc *scenarios.Scenario, self, task string, depth int, reg agent.Regist
 	env := append(os.Environ(), envWrapped+"=1")
 	if os.Getenv(envLease) == "" {
 		args := []string{"subactl", "run", "--kind", "lead"}
+		// At a terminal the lead gets one of its own, relayed to this one,
+		// so its prompt and Ctrl-C work as if it ran here directly.
+		if term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) {
+			args = append(args, "-it")
+		}
 		if m := sc.Envelopes["lead"]; m > 0 {
 			args = append(args, "--memory", strconv.FormatInt(m, 10))
 		}

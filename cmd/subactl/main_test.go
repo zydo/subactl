@@ -23,7 +23,7 @@ import (
 // daemonOnSocket serves a real subactld (fake backend) on a Unix socket.
 // Identity comes from the socket's peer credentials, as in production, so
 // the test process is an operator.
-func daemonOnSocket(t *testing.T) (socket string, f *backend.Fake) {
+func daemonOnSocket(t *testing.T, setup ...func(*backend.Fake)) (socket string, f *backend.Fake) {
 	t.Helper()
 	// t.TempDir is too long for a Unix socket path on macOS.
 	dir, err := os.MkdirTemp("/tmp", "subactl")
@@ -33,6 +33,9 @@ func daemonOnSocket(t *testing.T) (socket string, f *backend.Fake) {
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	socket = filepath.Join(dir, "s")
 	f = backend.NewFake()
+	for _, fn := range setup { // before the daemon's goroutines start
+		fn(f)
+	}
 	m, err := daemon.NewManager(context.Background(), daemon.Config{Backend: f, Capacity: 32 << 30, TermWait: 50 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
@@ -215,7 +218,8 @@ func TestRunWaits(t *testing.T) {
 		}()
 		code, out, errs := h.cli(append(args, "--", "agent")...)
 		var term api.Termination
-		if json.Unmarshal([]byte(out), &term); code != tc.wantExit || term.Code != tc.wantCode {
+		// The record of a lead goes to stderr; stdout is the lead's own output.
+		if json.Unmarshal([]byte(errs), &term); code != tc.wantExit || term.Code != tc.wantCode {
 			t.Fatalf("exit %d, want %d: %s%s", code, tc.wantExit, out, errs)
 		}
 	}
@@ -418,5 +422,35 @@ func TestShellAgnostic(t *testing.T) {
 	}
 	if ran == 0 {
 		t.Skip("no shell to test with")
+	}
+}
+
+// A lead started without a terminal still shows its output, as it is
+// written, on the stdout of "subactl run".
+func TestRunShowsLeadOutput(t *testing.T) {
+	scratch := t.TempDir()
+	socket, f := daemonOnSocket(t, func(f *backend.Fake) { f.ScratchBase = scratch })
+	go func() {
+		c := client.New(socket)
+		for range 400 {
+			leases, _ := c.Leases(context.Background(), "")
+			if len(leases) == 1 && leases[0].State == api.StateRunning {
+				dir := f.ScratchDir(leases[0].ID)
+				os.WriteFile(filepath.Join(dir, "stdout"), []byte("working on it\n"), 0o644)
+				os.WriteFile(filepath.Join(dir, "stderr"), []byte("a warning\n"), 0o644)
+				time.Sleep(300 * time.Millisecond) // a few rounds of the follower
+				f.ExitIfAlive(leases[0].ID, backend.ExitStatus{})
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
+	args := []string{"run", "--memory", "1G"}
+	if os.Getuid() == 0 {
+		args = append(args, "--uid", "1000")
+	}
+	code, out, errs := harness{t: t, socket: socket}.cli(append(args, "--", "agent")...)
+	if code != 0 || out != "working on it\n" || !strings.HasPrefix(errs, "a warning\n") || !strings.Contains(errs, `"name": "COMPLETED"`) {
+		t.Fatalf("exit %d\nstdout %q\nstderr %q", code, out, errs)
 	}
 }

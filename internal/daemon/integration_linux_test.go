@@ -19,6 +19,7 @@ import (
 	"os/user"
 	"path/filepath"
 	goruntime "runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -281,6 +282,37 @@ func TestIntegrationF14Nesting(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(e.base, string(lead), string(kid))); !os.IsNotExist(err) {
 		t.Fatalf("cgroup of a reaped lease still exists: %v", err)
+	}
+}
+
+// An agent keeps its user's supplementary groups, which is how it reaches
+// the daemon's socket, and can never gain privileges again: a setuid
+// program does not make it root.
+func TestIntegrationNoNewPrivileges(t *testing.T) {
+	e := newEnv(t)
+	id := e.run(e.op, 64*mib, `id -G > $SUBACTL_SCRATCH/groups; grep NoNewPrivs /proc/self/status > $SUBACTL_SCRATCH/nnp; (sudo -n id -u 2>&1; su -c "id -u" root </dev/null 2>&1) > $SUBACTL_SCRATCH/escalate; exec sleep 600`)
+	read := func(name string) string {
+		var out string
+		eventually(t, 5*time.Second, "the agent wrote "+name, func() bool {
+			data, err := os.ReadFile(filepath.Join(e.be.ScratchDir(id), name))
+			out = strings.TrimSpace(string(data))
+			return err == nil && out != ""
+		})
+		return out
+	}
+	if got := read("nnp"); !strings.HasSuffix(got, "1") {
+		t.Fatalf("no_new_privs is not set: %q", got)
+	}
+	u, _ := user.LookupId(strconv.Itoa(e.uid))
+	want, _ := u.GroupIds()
+	got := strings.Fields(read("groups"))
+	for _, g := range want {
+		if !slices.Contains(got, g) {
+			t.Errorf("the agent lost its group %s: has %v, its user has %v", g, got, want)
+		}
+	}
+	if out := read("escalate"); strings.Contains(out, "\n0") || strings.HasPrefix(out, "0") {
+		t.Fatalf("the agent became root: %q", out)
 	}
 }
 

@@ -363,7 +363,14 @@ func (b *Backend) Spawn(_ context.Context, g backend.ACGroup, c backend.Cmd) (ba
 	}
 	defer leaf.Close()
 
-	args := append([]string{ShimArg, strconv.Itoa(c.UID), strconv.Itoa(gid), strconv.Itoa(agentOOMScoreAdj), "--"}, c.Argv...)
+	// The agent keeps its user's supplementary groups: among them is the
+	// group that may reach the daemon's socket, without which it could not
+	// start child agents.
+	groups := strconv.Itoa(gid)
+	if ids, err := u.GroupIds(); err == nil && len(ids) > 0 {
+		groups = strings.Join(ids, ",")
+	}
+	args := append([]string{ShimArg, strconv.Itoa(c.UID), strconv.Itoa(gid), groups, strconv.Itoa(agentOOMScoreAdj), "--"}, c.Argv...)
 	cmd := exec.Command(b.cfg.Shim, args...)
 	cmd.Dir = c.Dir
 	cmd.Env = append(append([]string{}, c.Env...),
@@ -691,24 +698,33 @@ func (b *Backend) WatchHolder(ctx context.Context, pid int) (<-chan struct{}, er
 }
 
 // ShimMain is the pre-exec shim: subactld re-executed inside the lease's
-// cgroup and cgroup namespace, still as root. It fixes the OOM score floor,
-// drops to the agent's uid and execs the command. It returns only on error.
+// cgroup and cgroup namespace, still as root. It fixes the OOM score
+// floor, drops to the agent's user, forbids any later gain of privilege
+// and execs the command. It returns only on error.
 //
-//	subactld __exec <uid> <gid> <oom_score_adj> -- <command> [args...]
+//	subactld __exec <uid> <gid> <gid,gid,...> <oom_score_adj> -- <command> [args...]
 func ShimMain(args []string) error {
-	if len(args) < 5 || args[3] != "--" {
-		return errors.New("shim: usage: __exec UID GID OOM_SCORE_ADJ -- COMMAND [ARGS]")
+	if len(args) < 6 || args[4] != "--" {
+		return errors.New("shim: usage: __exec UID GID GROUPS OOM_SCORE_ADJ -- COMMAND [ARGS]")
 	}
 	uid, err1 := strconv.Atoi(args[0])
 	gid, err2 := strconv.Atoi(args[1])
 	if err1 != nil || err2 != nil || uid == 0 {
 		return errors.New("shim: a non-root uid and a gid are required")
 	}
+	var groups []int
+	for _, g := range strings.Split(args[2], ",") {
+		n, err := strconv.Atoi(g)
+		if err != nil || n == 0 {
+			continue // never the root group
+		}
+		groups = append(groups, n)
+	}
 	// Written while privileged, the value is also the floor.
-	if err := write("/proc/self/oom_score_adj", args[2]); err != nil {
+	if err := write("/proc/self/oom_score_adj", args[3]); err != nil {
 		return fmt.Errorf("shim: %w", err)
 	}
-	if err := syscall.Setgroups([]int{gid}); err != nil {
+	if err := syscall.Setgroups(groups); err != nil {
 		return fmt.Errorf("shim: setgroups: %w", err)
 	}
 	if err := syscall.Setgid(gid); err != nil {
@@ -717,7 +733,14 @@ func ShimMain(args []string) error {
 	if err := syscall.Setuid(uid); err != nil {
 		return fmt.Errorf("shim: setuid: %w", err)
 	}
-	argv := args[4:]
+	// No process of the lease may gain privileges again: setuid programs
+	// such as sudo run without their set-user-ID bit. An agent that became
+	// root could leave its cgroup namespace and undo every limit. This is
+	// inherited by every descendant and cannot be turned off.
+	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+		return fmt.Errorf("shim: no_new_privs: %w", err)
+	}
+	argv := args[5:]
 	path, err := exec.LookPath(argv[0])
 	if err != nil {
 		return fmt.Errorf("shim: %w", err)

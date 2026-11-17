@@ -12,7 +12,9 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -311,7 +313,27 @@ func (c *cli) start(ctx context.Context, name string, args []string) (int, error
 		c.print(ls)
 		return 0, nil
 	}
+	// A lead's output is what the person who started it wants to see. It
+	// is written to the lease's scratch directory, which goes away with the
+	// lease, so it is shown here while it is written. The termination
+	// record follows on stderr, where it does not mix with the output.
+	stopFollowing := func() {}
+	if name == "run" {
+		if full, err := c.api.Lease(ctx, ls.ID); err == nil && full.Scratch != "" {
+			stop := make(chan struct{})
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				follow(full.Scratch, c.out, c.err, stop)
+			}()
+			var once sync.Once
+			stopFollowing = func() { once.Do(func() { close(stop); <-done }) }
+			defer stopFollowing()
+		}
+	}
 	res, err := c.api.WaitChildren(ctx, ls.ID, api.WaitChildrenRequest{Self: true})
+	// The rest of the output first, then anything about the end of it.
+	stopFollowing()
 	if ctx.Err() != nil {
 		cleanup()
 		return 130, errors.New("interrupted; the lease was killed")
@@ -319,7 +341,72 @@ func (c *cli) start(ctx context.Context, name string, args []string) (int, error
 	if err != nil {
 		return 1, err
 	}
+	if name == "run" {
+		return c.reportEnd(res.Results[0])
+	}
 	return c.printTermination(res.Results[0])
+}
+
+// reportEnd writes a lead's termination record to stderr and exits by it.
+func (c *cli) reportEnd(t api.Termination) (int, error) {
+	enc := json.NewEncoder(c.err)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(t)
+	if t.Code >= 200 && t.Code < 300 {
+		return 0, nil
+	}
+	return 3, nil
+}
+
+// follow copies what is appended to the stdout and stderr files of a
+// scratch directory until stop is closed, then once more to the end. A
+// file that cannot be read, for want of permission or because it is
+// already gone, is skipped: the output is a convenience, the lease's fate
+// does not depend on it.
+func follow(scratch string, out, errw io.Writer, stop <-chan struct{}) {
+	type src struct {
+		name string
+		w    io.Writer
+		f    *os.File
+	}
+	srcs := []*src{{name: "stdout", w: out}, {name: "stderr", w: errw}}
+	buf := make([]byte, 32<<10)
+	drain := func() {
+		for _, s := range srcs {
+			if s.f == nil {
+				f, err := os.Open(filepath.Join(scratch, s.name))
+				if err != nil {
+					continue
+				}
+				s.f = f
+			}
+			for {
+				n, err := s.f.Read(buf)
+				if n > 0 {
+					_, _ = s.w.Write(buf[:n])
+				}
+				if err != nil || n == 0 {
+					break
+				}
+			}
+		}
+	}
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		drain()
+		select {
+		case <-stop:
+			drain()
+			for _, s := range srcs {
+				if s.f != nil {
+					s.f.Close()
+				}
+			}
+			return
+		case <-tick.C:
+		}
+	}
 }
 
 func (c *cli) printTermination(t api.Termination) (int, error) {
