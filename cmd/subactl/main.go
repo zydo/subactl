@@ -338,6 +338,14 @@ func (c *cli) start(ctx context.Context, name string, args []string) (int, error
 		cleanup()
 		return 130, errors.New("interrupted; the lease was killed")
 	}
+	var apiErr *api.Error
+	if err != nil && !errors.As(err, &apiErr) {
+		// Not a refusal from the daemon but the connection to it: the
+		// daemon went away. Whatever it was running has ended with it,
+		// since it never leaves a lease behind.
+		return 1, &api.Error{Code: api.ErrInternal, Message: fmt.Sprintf(
+			"lost the connection to subactld while waiting for lease %s (%v). A daemon that stops ends every lease, so the agent and everything it started have been stopped; nothing is left running.", ls.ID, err)}
+	}
 	if err != nil {
 		return 1, err
 	}

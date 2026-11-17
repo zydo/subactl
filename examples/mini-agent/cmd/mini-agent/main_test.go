@@ -3,11 +3,17 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/zydo/subactl/examples/mini-agent/agent"
 )
@@ -119,4 +125,69 @@ env:
 		t.Fatal("no orphans after the subagents were killed; the baseline defect is not reproduced")
 	}
 	t.Logf("%d orphaned processes after the usage limit", leftover)
+}
+
+// With a real provider, a usage limit ends the turn after one request,
+// says so, and leaves the lead at its prompt; it does not ask again and
+// again. The provider here is a stand-in that always answers 429.
+func TestRealBrainUsageLimit(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusTooManyRequests)
+		io.WriteString(w, `{"type":"error","error":{"type":"rate_limit_error","message":"Usage limit reached for 5 hour"}}`)
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "mini-agent")
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	cmd := exec.Command(bin, "--mode", "without", "--brain", "real", "--provider", "deepseek", "--base-url", srv.URL, "--run-dir", filepath.Join(dir, "run"))
+	cmd.Env = append(os.Environ(), "DEEPSEEK_API_KEY=test", "MINI_AGENT_DEPTH=", "MINI_AGENT_RUN=")
+	stdin, _ := cmd.StdinPipe()
+	var out lockedOutput
+	cmd.Stdout, cmd.Stderr = &out, &out
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	io.WriteString(stdin, "say hi\n")
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(out.String(), "usage limit was reached") {
+		if time.Now().After(deadline) {
+			cmd.Process.Kill()
+			t.Fatalf("no report of the limit:\n%s", out.String())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	time.Sleep(2 * time.Second) // time for any retry to show
+	stdin.Close()               // end of input: the lead ends
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("the lead did not end cleanly: %v\n%s", err, out.String())
+	}
+	if n := requests.Load(); n != 1 {
+		t.Fatalf("%d requests to a provider at its limit, want 1", n)
+	}
+	// After the report the lead prompts again, and only stops when its
+	// input ends.
+	if after, ok := strings.CutPrefix(out.String()[strings.Index(out.String(), "usage limit was reached"):], "usage limit was reached"); !ok || !strings.Contains(after, "\n> ") {
+		t.Fatalf("the lead did not return to its prompt:\n%s", out.String())
+	}
+}
+
+type lockedOutput struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (l *lockedOutput) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedOutput) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
 }

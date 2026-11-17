@@ -52,6 +52,7 @@ const (
 	envBrain    = "MINI_AGENT_BRAIN"    // scripted or real; children use their parent's
 	envProvider = "MINI_AGENT_PROVIDER" // endpoint of the real brain
 	envModel    = "MINI_AGENT_MODEL"    // model of the real brain
+	envBaseURL  = "MINI_AGENT_BASE_URL" // API root of the real brain
 	envLease    = "SUBACTL_LEASE_ID"    // set by subactl inside a lease
 	envSocket   = "SUBACTL_SOCK"
 )
@@ -80,6 +81,7 @@ func run() int {
 	brainName := flag.String("brain", envOr(envBrain, "scripted"), "scripted or real")
 	providerName := flag.String("provider", envOr(envProvider, "anthropic"), "endpoint of the real brain: anthropic, deepseek or zai")
 	model := flag.String("model", os.Getenv(envModel), "model of the real brain (default: the provider's)")
+	baseURL := flag.String("base-url", os.Getenv(envBaseURL), "API root of the real brain, e.g. a proxy (default: the provider's)")
 	prompt := flag.String("prompt", "", "what the lead should do, with the real brain (default: read it from the terminal)")
 	flag.Parse()
 	fail := func(code int, format string, a ...any) int {
@@ -185,6 +187,9 @@ func run() int {
 
 	var brain llm.Brain
 	if real {
+		if *baseURL != "" {
+			provider.BaseURL = *baseURL
+		}
 		brain = llm.NewMessages(provider, *model, os.Getenv(provider.KeyEnv))
 	} else {
 		steps, err := sc.Script(*task, depth)
@@ -216,6 +221,7 @@ func run() int {
 		envBrain+"="+*brainName,
 		envProvider+"="+*providerName,
 		envModel+"="+*model,
+		envBaseURL+"="+*baseURL,
 		envRunID+"="+envOr(envRunID, filepath.Base(*runDir)),
 		"RUN_ID="+envOr(envRunID, filepath.Base(*runDir)),
 		"RUN_DIR="+*runDir,

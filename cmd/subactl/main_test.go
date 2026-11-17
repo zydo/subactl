@@ -454,3 +454,44 @@ func TestRunShowsLeadOutput(t *testing.T) {
 		t.Fatalf("exit %d\nstdout %q\nstderr %q", code, out, errs)
 	}
 }
+
+// When the daemon goes away while "subactl run" waits, the message says
+// what happened and that nothing was left running.
+func TestRunDaemonGoesAway(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "subactl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	socket := filepath.Join(dir, "s")
+	m, err := daemon.NewManager(context.Background(), daemon.Config{Backend: backend.NewFake(), Capacity: 32 << 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := daemon.NewServer(m, nil)
+	srv := &http.Server{Handler: server, ConnContext: server.ConnContext}
+	go srv.Serve(ln)
+	go func() {
+		c := client.New(socket)
+		for range 400 {
+			if leases, _ := c.Leases(context.Background(), ""); len(leases) == 1 && leases[0].State == api.StateRunning {
+				srv.Close() // the daemon dies with the request open
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
+	args := []string{"--socket", socket, "run", "--memory", "1G"}
+	if os.Getuid() == 0 {
+		args = append(args, "--uid", "1000")
+	}
+	var out, errs bytes.Buffer
+	code := run(append(args, "--", "agent"), &out, &errs)
+	if code != 1 || !strings.Contains(errs.String(), "lost the connection to subactld") || !strings.Contains(errs.String(), "nothing is left running") {
+		t.Fatalf("exit %d, stderr %q", code, errs.String())
+	}
+}
