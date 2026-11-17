@@ -34,5 +34,5 @@ type Options struct {
 	// Brain and Provider are the lead's: "scripted", or "real" with an
 	// endpoint whose key is in the environment.
 	Brain, Provider string
-	Log         func(format string, a ...any)
+	Log             func(format string, a ...any)
 }
