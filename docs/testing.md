@@ -1,9 +1,11 @@
+English | [简体中文](testing.zh-CN.md)
+
 # Testing
 
 subactl supports Linux and macOS; on any other system its packages fail to
 build, with `undefined: subactl_supports_only_linux_and_macos`. This
-document lists the test suites and
-the machines they have run on, and what each machine can and cannot show.
+document lists the test suites and the machines they have run on, and what
+each machine can and cannot show.
 The benchmark is described in [benchmark.md](benchmark.md).
 
 ## The suites
@@ -12,7 +14,7 @@ The benchmark is described in [benchmark.md](benchmark.md).
 | --- | --- | --- | --- |
 | lint | `make lint` | Go | `gofmt`; `go vet` for the host, Linux and macOS; and that every public package fails to build on Windows and FreeBSD, only at its `unsupported.go` |
 | unit | `make test` | Go | the import rule (nothing outside the standard library, `golang.org/x/sys` and `golang.org/x/term`); the ledger, admission, the lease lifecycle and termination codes on the fake backend; the API against `api/openapi.yaml`; the client and CLI; the audit log, suggestions and metrics; mini-agent's loop, tools and LLM client (against recorded streams); on macOS also the `darwin` backend, with real processes |
-| integration | `make integration` | Linux, root, cgroup v2; Node for some tests | the cgroup v2 backend on a real kernel, one test per acceptance criterion (F1 to F33): nesting, whole-group reaping, escape prevention, fail-closed restart, memory isolation, the safety net and the capacity guard, wall and output limits, termination codes, identity by cgroup membership, multi-lead isolation and CPU fairness |
+| integration | `make integration` | Linux, root, cgroup v2; Node for some tests | the cgroup v2 backend on a real kernel, tests named after the acceptance criteria they check: nesting, whole-group reaping, escape prevention, fail-closed restart, memory isolation, the safety net and the capacity guard, wall and output limits, termination codes, identity by cgroup membership, multi-lead isolation and CPU fairness |
 | benchmark | `bench/chamber/run.sh` | Docker, network for the first run | the radix task in a blast chamber; see [benchmark.md](benchmark.md) |
 
 On Linux `make integration` runs the test binary under `sudo`; elsewhere
@@ -39,7 +41,7 @@ On Linux 6.5 or later the daemon also identifies callers by pidfd
 
 | machine | used for | notes |
 | --- | --- | --- |
-| Mac mini, Apple M4 Pro (14 cores), 64GB, macOS 27 | development; the `darwin` backend's tests with real processes; measuring how far a lease overshoots its limit between two checks | with a check every 200ms, a lease allocating at 100MiB/s went 8MiB over its limit and one allocating at 2GiB/s 284MiB, which is why the default reserve line on macOS is 25% of memory rather than 15% |
+| Mac mini, Apple M4 Pro (14 cores), 64GB, macOS 27 | development; the `darwin` backend's tests with real processes; the [tutorial](tutorial.md)'s examples; measuring how far a lease overshoots its limit between two checks | with a check every 200ms, a lease allocating at 100MiB/s went 8MiB over its limit and one allocating at 2GiB/s 284MiB, which is why the default reserve line on macOS is 25% of memory rather than 15% |
 | GitHub Actions `macos-latest` | every push: unit tests (including the `darwin` backend) with bash, zsh and fish required, and the build | |
 
 On macOS subactl monitors rather than enforces: there is no cgroup, so the

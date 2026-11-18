@@ -1,3 +1,5 @@
+English | [简体中文](README.zh-CN.md)
+
 # subactl
 
 A single-host resource controller for AI agents that start other agents.
@@ -68,7 +70,9 @@ what did not work, are in [docs/benchmark.md](docs/benchmark.md).
 
 ## Documentation
 
-- [DESIGN.md](DESIGN.md): the design (in Chinese), annotated where the
+- [docs/tutorial.md](docs/tutorial.md): build your own multi-agent
+  harness on subactl, with a working example in shell and in Go.
+- [docs/design.md](docs/design.md): the design, annotated where the
   implementation differs.
 - [docs/benchmark.md](docs/benchmark.md): the benchmark: the task, the
   harness, the setup, the hypotheses and the results.
@@ -120,7 +124,8 @@ bin/mini-agent --mode with --brain real --prompt "..."
 ```
 
 Running the full benchmark is described in
-[docs/benchmark.md](docs/benchmark.md#running-it).
+[docs/benchmark.md](docs/benchmark.md#running-it). To build a harness of
+your own, start with [the tutorial](docs/tutorial.md).
 
 ## Install as a service (Linux)
 

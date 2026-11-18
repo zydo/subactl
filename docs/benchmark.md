@@ -1,3 +1,5 @@
+English | [简体中文](benchmark.zh-CN.md)
+
 # The benchmark
 
 subactl is developed against a benchmark of its own: a small multi-agent
@@ -203,7 +205,7 @@ telling it to. H1 and H2 hold with a real model as they do with the script.
 - How each round was run, what went wrong and was redone, and the full
   tables are in the
   [results README](../examples/mini-agent/bench/results/README.md) and the
-  design's experiment section.
+  design's [comparison experiments](design.md#comparison-experiments).
 
 ## Running it
 
