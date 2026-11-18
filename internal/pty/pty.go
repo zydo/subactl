@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 // Package pty allocates pseudo-terminals with golang.org/x/sys alone, and
 // defines the small framing the lead's terminal relay uses.
 //

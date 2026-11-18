@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 // Package tools holds the four tools mini-agent gives its model: read,
 // write, edit and bash. Spawning a child agent is not a tool; the model
 // does it from bash.
