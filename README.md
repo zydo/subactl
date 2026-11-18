@@ -32,6 +32,21 @@ traces, and an inbox and progress beacons for the agent tree. `subactld`
 is the daemon, `subactl` the CLI; the only contract is
 [api/openapi.yaml](api/openapi.yaml), with a Go client in [client](client).
 
+## Install the agent skill
+
+The [subactl skill](skills/subactl/SKILL.md) teaches an agent to start,
+size, watch and end child agents through subactl. Add it to your agent
+with the [skills](https://github.com/vercel-labs/skills) CLI:
+
+```sh
+npx skills add zydo/subactl --skill subactl
+```
+
+or with GitHub's CLI: `gh skill install zydo/subactl`. The skill only
+teaches the commands: the machine the agent runs on also needs `subactl`
+on its `PATH` and a running `subactld` (see [Try it](#try-it) and
+[Install as a service](#install-as-a-service-linux)).
+
 ## Platforms
 
 subactl supports **Linux and macOS** only. On any other system, Windows
@@ -78,7 +93,7 @@ what did not work, are in [docs/benchmark.md](docs/benchmark.md).
   harness, the setup, the hypotheses and the results.
 - [docs/testing.md](docs/testing.md): the test suites, and the Linux and
   macOS machines they run on.
-- [skill/subactl.md](skill/subactl.md): how an agent uses subactl.
+- [skills/subactl/SKILL.md](skills/subactl/SKILL.md): the agent skill, how an agent uses subactl.
 - [api/openapi.yaml](api/openapi.yaml): the API.
 
 ## Status

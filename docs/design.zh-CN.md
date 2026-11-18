@@ -311,7 +311,7 @@ subactl/                         # module: github.com/zydo/subactl
   internal/contract/             # 读取 openapi.yaml，供一致性测试使用
   internal/lint/                 # 依赖规则检查（以测试形式运行）
   deploy/subactld.service        # systemd unit
-  skill/subactl.md               # 教 LLM 使用 subactl 的 skill，与具体 harness 无关
+  skills/subactl/SKILL.md        # 教 LLM 使用 subactl 的 skill，与具体 harness 无关
   examples/mini-agent/           # module: github.com/zydo/subactl/examples/mini-agent（独立 go.mod）
     cmd/mini-agent/
     cmd/bench/                   # 对照实验与报告（run / report / extract / hog）

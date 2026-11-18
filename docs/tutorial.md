@@ -196,7 +196,7 @@ arbitrary text.
 
 ## 6. Letting a model plan
 
-Give the model [`skill/subactl.md`](../skill/subactl.md): a page on
+Give the model the [subactl skill](../skills/subactl/SKILL.md) (`npx skills add zydo/subactl --skill subactl`): a page on
 spawning, sizing, ending, and the termination codes. Then give it a loop
 rather than asking it to dispatch one worker per turn. In the benchmark, a
 model that planned by hand, one bash call per turn, started 11 to 35

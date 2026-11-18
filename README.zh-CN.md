@@ -14,6 +14,16 @@ subactl 把每个 agent 放进一个 **lease**：一组进程，带一个从父�
 
 围绕这三条，还有：按实测峰值给出的建议配额、NEAR_LIMIT 预警、运行时长与输出量上限、说明每个 lease 为何结束的终止码、审计日志、Prometheus 指标、`subactl top` 与逐个 lease 的追溯，以及 agent 树的 inbox 与进度信标。`subactld` 是 daemon，`subactl` 是 CLI；唯一的契约是 [api/openapi.yaml](api/openapi.yaml)，Go client 在 [client](client)。
 
+## 安装 agent skill
+
+[subactl skill](skills/subactl/SKILL.md) 教 agent 通过 subactl 启动、确定配额、观察和结束子 agent。用 [skills](https://github.com/vercel-labs/skills) CLI 把它加到你的 agent：
+
+```sh
+npx skills add zydo/subactl --skill subactl
+```
+
+也可以用 GitHub 的 CLI：`gh skill install zydo/subactl`。skill 只教命令怎么用：agent 所在的机器还需要把 `subactl` 放进 `PATH`，并运行 `subactld`（见[试用](#试用)和[作为服务安装](#作为服务安装linux)）。
+
 ## 平台
 
 subactl 只支持 **Linux 和 macOS**。在其他任何系统（包括 Windows）上，构建会立即失败，报错为 `undefined: subactl_supports_only_linux_and_macos`。
@@ -39,7 +49,7 @@ subactl 是对着一个基准测试开发的：一个精简的 multi-agent harne
 - [docs/design.zh-CN.md](docs/design.zh-CN.md)：设计文档，实现与设计不同之处已标注。
 - [docs/benchmark.zh-CN.md](docs/benchmark.zh-CN.md)：基准测试：任务、harness、实验设置、假设与结果。
 - [docs/testing.zh-CN.md](docs/testing.zh-CN.md)：各测试套件，以及运行它们的 Linux 与 macOS 机器。
-- [skill/subactl.md](skill/subactl.md)：agent 如何使用 subactl（英文，供模型阅读）。
+- [skills/subactl/SKILL.md](skills/subactl/SKILL.md)：agent skill，教 agent 如何使用 subactl（英文，供模型阅读）。
 - [api/openapi.yaml](api/openapi.yaml)：API。
 
 ## 状态

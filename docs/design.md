@@ -311,7 +311,7 @@ subactl/                         # module: github.com/zydo/subactl
   internal/contract/             # reads openapi.yaml for the conformance tests
   internal/lint/                 # dependency rules (run as tests)
   deploy/subactld.service        # systemd unit
-  skill/subactl.md               # the skill that teaches an LLM to use subactl, independent of any harness
+  skills/subactl/SKILL.md        # the skill that teaches an LLM to use subactl, independent of any harness
   examples/mini-agent/           # module: github.com/zydo/subactl/examples/mini-agent (its own go.mod)
     cmd/mini-agent/
     cmd/bench/                   # the comparison experiments and reports (run / report / extract / hog)
