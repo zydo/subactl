@@ -1,0 +1,30 @@
+{
+  "group": "A",
+  "run": 5,
+  "scenario": "radix.yaml",
+  "chamber_bytes": 12884901888,
+  "mem_basis": "working_set",
+  "host_peak_ws": 12.000362396240234,
+  "host_oom": 1358736,
+  "oom_kills": 2577,
+  "meltdown": false,
+  "orphans_after": 116,
+  "leaked_ws_after": 4.025394439697266,
+  "completion": 0.09259259259259259,
+  "packages": 54,
+  "work_lost": 25,
+  "util_mean": 0.470750558610056,
+  "safety_net_count": 0,
+  "makespan": 15.0015251633,
+  "lead_exit": 0,
+  "orphan_sample": [
+    "node /srv/radix/wt/a-17-5/use-escape-keydown/node_modules/.bin/storybook dev -p 9081 --ci --no-open",
+    "/srv/radix/wt/a-17-5/use-escape-keydown/node_modules/@storybook/core-common/node_modules/@esbuild/linux-x64/bin/esbuild …",
+    "node /srv/radix/wt/a-17-5/toolbar/node_modules/.bin/storybook dev -p 9082 --ci --no-open",
+    "node /srv/radix/wt/a-17-5/use-rect/node_modules/.bin/storybook dev -p 9083 --ci --no-open",
+    "node /srv/radix/wt/a-17-5/toast/node_modules/.bin/storybook dev -p 9084 --ci --no-open",
+    "/srv/radix/wt/a-17-5/use-escape-keydown/node_modules/@storybook/builder-manager/node_modules/@esbuild/linux-x64/bin/esbu…",
+    "/srv/radix/wt/a-17-5/use-rect/node_modules/@storybook/core-common/node_modules/@esbuild/linux-x64/bin/esbuild --service=…",
+    "/srv/radix/wt/a-17-5/toolbar/node_modules/@storybook/core-common/node_modules/@esbuild/linux-x64/bin/esbuild --service=0…"
+  ]
+}

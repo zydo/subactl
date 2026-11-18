@@ -1,0 +1,62 @@
+[
+  {
+    "group": "A",
+    "run": 1,
+    "scenario": "radix-real.yaml",
+    "chamber_bytes": 12884901888,
+    "mem_basis": "working_set",
+    "host_peak_ws": 11.99991226196289,
+    "host_oom": 3938,
+    "oom_kills": 77,
+    "meltdown": false,
+    "orphans_after": 153,
+    "leaked_ws_after": 4.250064849853516,
+    "completion": 1,
+    "packages": 8,
+    "work_lost": 0,
+    "util_mean": 0.45044758838155996,
+    "safety_net_count": 0,
+    "makespan": 2.8175384847666667,
+    "lead_exit": 0,
+    "orphan_sample": [
+      "node /srv/radix/wt/a-17-1/aspect-ratio/node_modules/.bin/storybook dev -p 9010 --ci --no-open",
+      "/srv/radix/wt/a-17-1/aspect-ratio/node_modules/@storybook/core-common/node_modules/@esbuild/linux-x64/bin/esbuild --serv\u2026",
+      "/srv/radix/wt/a-17-1/aspect-ratio/node_modules/@storybook/builder-manager/node_modules/@esbuild/linux-x64/bin/esbuild --\u2026",
+      "node /srv/radix/wt/a-17-1/announce/node_modules/.bin/storybook dev -p 9013 --ci --no-open",
+      "/srv/radix/wt/a-17-1/announce/node_modules/@storybook/core-common/node_modules/@esbuild/linux-x64/bin/esbuild --service=\u2026",
+      "node /srv/radix/wt/a-17-1/checkbox/node_modules/.bin/storybook dev -p 9015 --ci --no-open",
+      "/srv/radix/wt/a-17-1/announce/node_modules/@storybook/builder-manager/node_modules/@esbuild/linux-x64/bin/esbuild --serv\u2026",
+      "/srv/radix/wt/a-17-1/checkbox/node_modules/@storybook/core-common/node_modules/@esbuild/linux-x64/bin/esbuild --service=\u2026"
+    ]
+  },
+  {
+    "group": "A",
+    "run": 2,
+    "scenario": "radix-real.yaml",
+    "chamber_bytes": 12884901888,
+    "mem_basis": "working_set",
+    "host_peak_ws": 12.000064849853516,
+    "host_oom": 78563,
+    "oom_kills": 339,
+    "meltdown": false,
+    "orphans_after": 84,
+    "leaked_ws_after": 1.6610107421875,
+    "completion": 1,
+    "packages": 8,
+    "work_lost": 4,
+    "util_mean": 0.3397767317396562,
+    "safety_net_count": 0,
+    "makespan": 7.574811126616667,
+    "lead_exit": 0,
+    "orphan_sample": [
+      "node /srv/radix/wt/a-17-2/alert-dialog/node_modules/.bin/storybook dev -p 9023 --ci --no-open",
+      "/srv/radix/wt/a-17-2/alert-dialog/node_modules/@storybook/core-common/node_modules/@esbuild/linux-x64/bin/esbuild --serv\u2026",
+      "/srv/radix/wt/a-17-2/alert-dialog/node_modules/@storybook/builder-manager/node_modules/@esbuild/linux-x64/bin/esbuild --\u2026",
+      "/srv/radix/pw/browsers/chromium-1117/chrome-linux/chrome --headless=new --remote-debugging-port=23114 --user-data-dir=/t\u2026",
+      "/srv/radix/pw/browsers/chromium-1117/chrome-linux/chrome_crashpad_handler --monitor-self --monitor-self-annotation=ptype\u2026",
+      "/srv/radix/pw/browsers/chromium-1117/chrome-linux/chrome_crashpad_handler --no-periodic-tasks --monitor-self-annotation=\u2026",
+      "/srv/radix/pw/browsers/chromium-1117/chrome-linux/chrome --type=zygote --no-zygote-sandbox --no-sandbox --headless=new -\u2026",
+      "/srv/radix/pw/browsers/chromium-1117/chrome-linux/chrome --type=zygote --no-sandbox --headless=new --crashpad-handler-pi\u2026"
+    ]
+  }
+]

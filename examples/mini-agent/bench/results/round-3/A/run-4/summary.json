@@ -1,0 +1,30 @@
+{
+  "group": "A",
+  "run": 4,
+  "scenario": "radix.yaml",
+  "chamber_bytes": 12884901888,
+  "mem_basis": "working_set",
+  "host_peak_ws": 12.000003814697266,
+  "host_oom": 792112,
+  "oom_kills": 1718,
+  "meltdown": false,
+  "orphans_after": 12,
+  "leaked_ws_after": 0.6788825988769531,
+  "completion": 0.018518518518518517,
+  "packages": 54,
+  "work_lost": 2,
+  "util_mean": 0.23077723105831194,
+  "safety_net_count": 0,
+  "makespan": 15.000988756266667,
+  "lead_exit": 0,
+  "orphan_sample": [
+    "node /srv/radix/wt/a-17-4/visually-hidden/node_modules/.bin/storybook dev -p 9063 --ci --no-open",
+    "/srv/radix/wt/a-17-4/visually-hidden/node_modules/@storybook/core-common/node_modules/@esbuild/linux-x64/bin/esbuild --s…",
+    "/srv/radix/wt/a-17-4/visually-hidden/node_modules/@storybook/builder-manager/node_modules/@esbuild/linux-x64/bin/esbuild…",
+    "/srv/radix/pw/browsers/chromium-1117/chrome-linux/chrome --headless=new --remote-debugging-port=33312 --user-data-dir=/t…",
+    "/srv/radix/pw/browsers/chromium-1117/chrome-linux/chrome_crashpad_handler --monitor-self --monitor-self-annotation=ptype…",
+    "/srv/radix/pw/browsers/chromium-1117/chrome-linux/chrome_crashpad_handler --no-periodic-tasks --monitor-self-annotation=…",
+    "/srv/radix/pw/browsers/chromium-1117/chrome-linux/chrome --type=zygote --no-zygote-sandbox --no-sandbox --headless=new -…",
+    "/srv/radix/pw/browsers/chromium-1117/chrome-linux/chrome --type=zygote --no-sandbox --headless=new --crashpad-handler-pi…"
+  ]
+}

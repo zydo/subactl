@@ -3,37 +3,54 @@
     0s [lead] ← bash #1 accessible-icon accordion alert-dialog announce arrow aspect-ratio avatar checkbox collapsible collection compose-refs context context-menu dialog direction dismissable-layer dropdown-menu focus-guard…
   2m0s [lead] One worker per package, in parallel.
   2m0s [lead] → bash #2 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
-  5m0s [lead] usage limit: killed subagent upgrade:toggle.d1 (pid 398894)
-  5m0s [lead] usage limit: killed subagent upgrade:toggle-group.d1 (pid 399380)
-  5m0s [lead] usage limit: killed subagent upgrade:tooltip.d1 (pid 401053)
-  5m3s [lead] ← bash #2 dispatching 55 workers, at most 32 at a time { "code": 200, "name": "COMPLETED", "lease": "ls_24594199", "kind": "upgrade", "parent": "ls_898b0e6e", "mem_basis": "working_set", "peak": 1907634176, "li…
+  5m0s [lead] usage limit: killed subagent upgrade:toggle.d1 (pid 403350)
+  5m0s [lead] usage limit: killed subagent upgrade:toggle-group.d1 (pid 403385)
+  5m0s [lead] usage limit: killed subagent upgrade:tooltip.d1 (pid 405283)
+  5m3s [lead] ← bash #2 dispatching 55 workers, at most 32 at a time { "code": 200, "name": "COMPLETED", "lease": "ls_0f2dc701", "kind": "upgrade", "parent": "ls_4e1b2aab", "mem_basis": "working_set", "peak": 1928425472, "li…
   5m3s [lead] ! llm: usage limit reached
  5m21s [lead] Some workers did not report back. Dispatching those again.
  5m21s [lead] → bash #3 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
- 15m0s [lead] ← bash #3 dispatching 46 workers, at most 32 at a time { "code": 200, "name": "COMPLETED", "lease": "ls_284f74e7", "kind": "upgrade", "parent": "ls_898b0e6e", "mem_basis": "working_set", "peak": 1884876800, "li…
- 15m0s [lead] ⇢ [subactl events about your child agents since the last turn] ls_016a332c TERMINATED ls_020ba839 TERMINATED ls_03727726 TERMINATED ls_0b5b52d4 DONE ls_0b5b52d4 TERMINATED ls_0db1b2c2 DONE ls_0db1b2c2 T…
+ 15m0s [lead] ← bash #3 dispatching 46 workers, at most 32 at a time { "code": 200, "name": "COMPLETED", "lease": "ls_8708bc01", "kind": "upgrade", "parent": "ls_4e1b2aab", "mem_basis": "working_set", "peak": 1788612608, "li…
+ 15m0s [lead] ⇢ [subactl events about your child agents since the last turn] ls_0ba7a21c TERMINATED ls_0cd3ff04 TERMINATED ls_0e24f373 TERMINATED ls_0f2dc701 DONE ls_0f2dc701 TERMINATED ls_12fd5b41 TERMINATED ls_146c…
  15m0s [lead] Checking once more for packages without a result.
  15m0s [lead] → bash #4 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
- 15m0s [lead] ← bash #4 dispatching 24 workers, at most 32 at a time no time left
- 15m0s [lead] ⇢ [subactl events about your child agents since the last turn] ls_08449766 TERMINATED ls_08dccc82 TERMINATED ls_09878dba DONE ls_09878dba TERMINATED ls_0b0b746d DONE ls_0b0b746d TERMINATED ls_0b40770e D…
+ 15m0s [lead] ← bash #4 dispatching 28 workers, at most 32 at a time no time left
+ 15m0s [lead] ⇢ [subactl events about your child agents since the last turn] ls_07d2814c TERMINATED ls_0876e411 DONE ls_0876e411 TERMINATED ls_0a63ccc8 DONE ls_0a63ccc8 TERMINATED ls_10505771 TERMINATED ls_180b5bba D…
  15m0s [lead] Time is up. Collecting results.
  15m0s [lead] → bash #5 {"command":"ls \"$RUN_DIR/results\" | wc -l","timeout":60}
- 15m0s [lead] ← bash #5 65
+ 15m0s [lead] ← bash #5 58
  15m0s [lead] Done.
  15m0s [lead] finished; run directory: /tmp/out/C/run-5/run
 {
   "code": 200,
   "name": "COMPLETED",
-  "lease": "ls_898b0e6e",
+  "lease": "ls_4e1b2aab",
   "kind": "lead",
   "mem_basis": "working_set",
-  "peak": 8709279744,
+  "peak": 8070819840,
   "limit": 9663676416,
   "enforcement": "hard",
   "evidence": {
     "exit_code": 0,
-    "reaped_pids": 162
+    "reaped_pids": 54,
+    "top_procs": [
+      {
+        "memory": 8720384,
+        "name": "subactl",
+        "pid": 419754
+      },
+      {
+        "memory": 8704000,
+        "name": "subactl",
+        "pid": 474196
+      },
+      {
+        "memory": 8646656,
+        "name": "subactl",
+        "pid": 475605
+      }
+    ]
   },
-  "message": "lead ls_898b0e6e completed: its main process exited with status 0.",
-  "at": "2026-11-17T16:53:44.59420373Z"
+  "message": "lead ls_4e1b2aab completed: its main process exited with status 0.",
+  "at": "2026-11-17T23:54:09.412650046Z"
 }

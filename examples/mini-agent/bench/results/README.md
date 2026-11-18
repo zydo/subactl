@@ -5,84 +5,124 @@ directory: the verdicts on the four hypotheses, the tables, the charts and
 `series.parquet`. This file adds what the generated report cannot say:
 how the runs were made and how far the conclusions reach.
 
-This is round 3, the one the design's conclusions rest on. Earlier rounds
-are kept for the record: `round-2/` (Docker Desktop, before the fixes
-listed below) and `round-1/` (void).
+This is round 4, the one the design's conclusions rest on. Beside it:
+
+- `real-model/`: the check with a real model as lead and workers.
+- `L-before-guard/`: the first five runs of group L, before the capacity
+  guard (see below).
+- `round-3/`, `round-2/` (Docker Desktop) and `round-1/` (void): earlier
+  rounds, kept for the record.
 
 ## Setup
 
 - Scenario `scenarios/radix.yaml`: upgrade radix-ui/primitives to React 19
-  with the scripted brain, the same file and seed for all three groups.
-- Five runs per group, on 2026-11-17, on a physical machine: Intel Core
-  Ultra 9 285K (24 cores), 60GB, Ubuntu 26.04, Linux 7.0, x86-64. Each run
-  is in a privileged Docker container whose blast chamber, an outer
-  cgroup, is capped at 12GiB. Groups B and C run under subactl with a
-  1.8GiB reserve line inside the chamber.
+  with the scripted brain, the same file and seed for every group.
+  Group L uses `scenarios/radix-llm-planner.yaml`, the same scenario with a
+  model as the lead.
+- Five runs per group, on a physical machine: Intel Core Ultra 9 285K (24
+  cores), 60GB, Ubuntu 26.04, Linux 7.0, x86-64. Each run is in a
+  privileged Docker container whose blast chamber, an outer cgroup, is
+  capped at 12GiB. Groups B, C and L run under subactl with a 1.8GiB
+  reserve line inside the chamber.
 - Group A: no subactl. Group B: fixed envelopes. Group C: envelopes from
-  `subactl suggest` once there is history, growing by half on NEAR_LIMIT;
-  its history carries over from run to run.
-- Built from commit `841f605`, which includes every fix found up to then:
-  suggestions count only leases that ended well, lease output goes through
-  the daemon and stops at its limit, agents keep their supplementary
-  groups and cannot gain privileges.
+  `subactl suggest` once there is history, growing by half on NEAR_LIMIT.
+  Group L: DeepSeek (`deepseek-v4-pro`) as the planner, deciding each
+  worker's envelope and how many run at once; the workers and fixers below
+  it are the same scripted ones as in B and C. C's and L's history carries
+  over from run to run.
+- Groups B and C were run on 2026-11-17 from commit `01ff087`, group L
+  from `5772511`. Group A is round 3's (commit `841f605`): without subactl
+  no envelope applies, so the fix that made round 4 necessary does not
+  touch it.
+
+## Why round 4
+
+In rounds 2 and 3 the G5 worker, whose task is "runaway" with no package,
+was taken for a model's free-text task and got the default 1GiB instead of
+the scenario's 256MiB. In group C that cost a third worker for the last six
+minutes of every run: three 2.9GiB workers and a 256MiB runaway fit in the
+lead's 9GiB, with a 1GiB runaway only two do. C's completion went from 51%
+to 53%; B's from 40% to 41%.
 
 ## Verdicts
 
 | | verdict | in short |
 | --- | --- | --- |
-| H1 | refuted, in one run of A | A left 12 to 116 processes behind in four runs and none in the fifth; B and C left none in any run |
-| H2 | holds | A hit the chamber's cap in every run; B and C never did |
-| H3 | refuted | C's utilisation is 5.5 points above B's, not 15, and C lost more work (20.2 against 14.2 subtasks) |
-| H4 | holds, but untested | the safety net never fired in B or C, so the hypothesis was not put under strain |
+| H1 | refuted, in one run of A | A left 12 to 116 processes behind in four runs and none in the fifth; B, C and L left none in any of fifteen runs |
+| H2 | holds | A hit the chamber's cap in every run; B, C and L never did |
+| H3 | refuted | C's utilisation is 4.3 points above B's, not 15, and C lost more work (21.4 against 15.2 subtasks) |
+| H4 | holds, but untested | the safety net never fired in B or C |
 
-Completion was 4% without subactl, 40% with fixed envelopes and 51% with
-suggested ones.
+Completion: A 4%, B 41%, C 53%, L 24%.
+
+## The model as planner (group L)
+
+| run | 1 | 2 | 3 | 4 | 5 | mean |
+| --- | --- | --- | --- | --- | --- | --- |
+| completion | 39% | 15% | 30% | 24% | 11% | 24% |
+| ended over their limit (413) | 22 | 18 | 13 | 6 | 3 | |
+
+DeepSeek kept the machine safe: no process left, the chamber's limit never
+reached. As a planner it did worse than the fixed rule of group C, and than
+group B's fixed envelopes. Its envelopes for the same kind of worker changed
+from run to run and within a run: mostly 2GiB in run 1, between 1.7 and
+3.3GiB in the others, most of them below C's suggestion of about 2.9GiB and
+all below B's 3.5GiB. It called `subactl suggest` once to four times a run,
+eleven times in all. Its results scatter from 11% to 39%. With envelopes
+too small for the greedy quarter of the workers, more of them went over
+their limit (22 in run 1, with 56 upgrade workers started); when it started
+fewer, fewer went over and fewer packages were done (16 workers and 3 over
+their limit in run 5). The first five runs, before the guard, look the
+same: 17% to 31%, envelopes from 1.5 to 6GiB. The rule of group C, the
+95th percentile of past peaks times 1.2, needs none of that judgment and
+does better.
+
+## The capacity guard
+
+In the first five runs of group L (`L-before-guard/`), run 5 hit the
+chamber's limit once. While the external interference held 3.6GiB,
+workers admitted earlier started hundreds of processes at once and went
+from 0.3GiB to 8.3GiB in two seconds; the safety net, which needs three
+readings below the reserve line, had no time, and the kernel emptied the
+chamber. subactl now keeps one kernel limit over all leases together, at
+total memory minus external use minus half the reserve: a burst faster
+than the net is ended inside the leases, one lease at a time, as 503. An
+integration test shows the same burst ended in under a tenth of a second
+with the machine's limit untouched, and the limit hit without the guard.
+
+In no run of B or C, and in no other run of L, was the chamber above total
+minus the reserve line for even a second, so the guard could not have acted
+there; only group L was run again. In those five runs the chamber peaked
+at 5.1 to 6.7GiB and the guard never acted either: what the reruns show is
+that it does no harm, not that it helps. That is shown by the test.
 
 ## How far this reaches
 
-- **H1 fails on the letter, not on the substance.** It asks that A leave
-  processes behind in every run. In run 3 of A the chamber was so short of
-  memory that the kernel's OOM killer killed 2,540 processes, the orphans
-  among them, and by the time of the count nothing was left; that run
-  also completed nothing. The rule was fixed before the runs and is not
-  changed after them, so the verdict stands. What the design cares about,
-  that B and C never leave anything behind, held in all ten runs.
-- **H3 is refuted on both counts, as in round 2, but the cause is now a
-  different one.** The suggestion no longer climbs: the envelopes given to
-  upgrade workers stayed between 2,877 and 2,985MiB in all five runs of C
-  (B uses a fixed 3,500MiB). Tighter envelopes ran more workers at once and
-  completed more (51% against 40%), but the greedy workers among them hit
-  their limit more often, so more work was lost. Utilisation is low in
-  both groups because admission counts envelopes, not use: two or three
-  worker envelopes fill a lead's 9GiB while the workers in them use far
-  less.
-- **H4 says less than it seems.** The interference took 30% of the
-  chamber and available memory never fell below the reserve line. That
-  the net warns first and ends exactly one lease is shown by the
-  integration tests for F8 and F10 on real memory, not by these runs.
+- **H1 fails on the letter, not on the substance.** In run 3 of A the
+  kernel's OOM killer killed 2,540 processes, the orphans among them, and
+  nothing was left to count; that run completed nothing. The rule was fixed
+  before the runs and is not changed after them. What the design cares
+  about, that subactl never leaves anything behind, held in all fifteen
+  runs of B, C and L, and with a real model too (`real-model/`).
+- **H3 is refuted on both counts.** The suggestions are stable (2.8 to
+  2.9GiB per upgrade worker against B's fixed 3.5GiB) and C completes the
+  most, but the greedy workers among its tighter envelopes hit their limit
+  more often. Utilisation stays low in every group because admission counts
+  envelopes, not use.
+- **H4 says less than it seems.** The interference took 30% of the chamber
+  and B and C never fell below the reserve line. The safety net is shown by
+  the integration tests for F8 and F10, and the capacity guard by its own.
 - **The chamber is an outer cgroup, not a separate machine.** "The host
-  goes down" is seen here as the cap being hit and processes being killed
-  inside it. The watchdog never declared a meltdown.
+  goes down" is the chamber's limit being hit and the kernel killing inside
+  it. The watchdog never declared a meltdown.
 - **Completion compares the groups; it does not measure the task.** 54
-  packages do not fit in 13 minutes at two or three workers at a time.
-  Every run of B and C also fails `slot`, whose stories raise
-  `React.Children.only` under React 19: a real failure of the task.
-- **Many leases end with 520 in B and C.** During the 20 seconds of the
-  simulated usage limit, each worker that is started fails its first model
-  call and exits; the lead dispatches them again afterwards.
-- **414 now appears in B as well as C.** The runaway worker's output is
-  counted as it passes through the daemon, so it is ended for its output
-  before the page cache can push it over its memory limit. In round 2 no
-  run of B ended a lease with 414.
-
-## A void first attempt
-
-The first attempt at this round completed nothing in any run of any
-group. The screenshot check starts a browser of its own for G2, and on
-this host Chromium refuses to start without its sandbox unless it runs
-as root: Ubuntu 26.04 restricts the user namespaces the sandbox needs, a
-restriction Docker Desktop does not have. Every check failed at once. The
-check now starts that browser without the sandbox, as Playwright's own
-launch does, and `run.sh` keeps each run's task results and transcripts
-(`agents.tgz`, not committed for size) so that a run like that can be
-diagnosed without running it again.
+  packages do not fit in 13 minutes at two or three workers at a time, and
+  every run of B, C and L fails `slot`, whose stories raise
+  `React.Children.only` under React 19.
+- **Many leases end with 520** during the 20 seconds of the simulated usage
+  limit: each worker started then fails its first model call and exits, and
+  the lead dispatches it again.
+- **L is one model, one prompt, five runs.** Another model or a planner
+  told more about the workloads could do better; this shows what a capable
+  general model does with the tools subactl gives it, not the best a model
+  can do.

@@ -29,12 +29,15 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
   and adapter, identity by cgroup membership, the inbox, graceful
   termination, declared policies, progress beacons, idle detection,
   `subactl top`, and the skill in [skill/subactl.md](skill/subactl.md).
-- **M5, experiments: done.** Three groups, five runs each, on the radix
-  upgrade task, on a physical x86-64 machine: without subactl every run
-  hits the memory cap and four of five leave processes behind; with it no
-  run of ten does either. Completion is 4% without subactl, 40% with
-  fixed envelopes and 51% with suggested ones. One hypothesis holds, one
-  holds without having been put under strain, two are refuted. See
+- **M5, experiments: done.** Groups of five runs on the radix upgrade
+  task, on a physical x86-64 machine: without subactl every run hits the
+  memory cap and four of five leave processes behind; with it no run of
+  fifteen does either. Completion is 4% without subactl, 41% with fixed
+  envelopes, 53% with suggested ones, and 24% with DeepSeek as the planner
+  sizing the workers itself. One hypothesis holds, one holds without having
+  been put under strain, two are refuted. With DeepSeek as lead and workers
+  doing the real work, the same holds: everything left behind and a full
+  chamber without subactl, nothing with it. See
   [the results](examples/mini-agent/bench/results/README.md).
 - **The real brain** speaks the Anthropic Messages API over `net/http` and
   has been run against DeepSeek and Z.AI through their compatible

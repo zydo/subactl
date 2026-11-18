@@ -3,36 +3,48 @@
     0s [lead] ← bash #1 accessible-icon accordion alert-dialog announce arrow aspect-ratio avatar checkbox collapsible collection compose-refs context context-menu dialog direction dismissable-layer dropdown-menu focus-guard…
   2m0s [lead] One worker per package, in parallel.
   2m0s [lead] → bash #2 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
-  5m0s [lead] usage limit: killed subagent upgrade:tabs.d1 (pid 21412)
-  5m0s [lead] usage limit: killed subagent upgrade:toggle.d1 (pid 22680)
-  5m3s [lead] ← bash #2 dispatching 55 workers, at most 32 at a time { "code": 200, "name": "COMPLETED", "lease": "ls_c0c99e87", "kind": "upgrade", "parent": "ls_a345ca47", "mem_basis": "working_set", "peak": 1933475840, "li…
+  5m0s [lead] usage limit: killed subagent upgrade:tabs.d1 (pid 21494)
+  5m0s [lead] usage limit: killed subagent upgrade:toggle.d1 (pid 22696)
+  5m3s [lead] ← bash #2 dispatching 55 workers, at most 32 at a time { "code": 200, "name": "COMPLETED", "lease": "ls_708fff12", "kind": "upgrade", "parent": "ls_b0c9242e", "mem_basis": "working_set", "peak": 1884262400, "li…
   5m3s [lead] ! llm: usage limit reached
  5m21s [lead] Some workers did not report back. Dispatching those again.
  5m21s [lead] → bash #3 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
- 15m0s [lead] ← bash #3 dispatching 48 workers, at most 32 at a time { "code": 200, "name": "COMPLETED", "lease": "ls_1b13aea3", "kind": "upgrade", "parent": "ls_a345ca47", "mem_basis": "working_set", "peak": 1857138688, "li…
- 15m0s [lead] ⇢ [subactl events about your child agents since the last turn] ls_00c7b73c DONE ls_00c7b73c TERMINATED ls_02088da7 TERMINATED ls_09210e82 TERMINATED ls_0d28b8eb TERMINATED ls_0d495ae9 TERMINATED ls_0f38…
+ 15m0s [lead] ← bash #3 dispatching 48 workers, at most 32 at a time { "code": 413, "name": "OOM_LEASE_LIMIT", "lease": "ls_4e8caaad", "kind": "upgrade", "parent": "ls_b0c9242e", "dimension": "memory", "mem_basis": "working_…
+ 15m0s [lead] ⇢ [subactl events about your child agents since the last turn] ls_02c8ff3a TERMINATED ls_070c6d5c DONE ls_070c6d5c TERMINATED ls_0715149c TERMINATED ls_087b3e81 TERMINATED ls_1ed625eb DONE ls_1ed625eb T…
  15m0s [lead] Checking once more for packages without a result.
  15m0s [lead] → bash #4 {"command":"\"$TASK_DIR/dispatch.sh\"","timeout":780}
  15m0s [lead] ← bash #4 dispatching 32 workers, at most 32 at a time no time left
- 15m0s [lead] ⇢ [subactl events about your child agents since the last turn] ls_00a84b37 DONE ls_00a84b37 TERMINATED ls_120d0e6d DONE ls_120d0e6d TERMINATED ls_19157f6c DONE ls_19157f6c TERMINATED ls_19396d9d DONE ls…
+ 15m0s [lead] ⇢ [subactl events about your child agents since the last turn] ls_002571a7 NEAR_LIMIT ls_002571a7 TERMINATED ls_018ff17f DONE ls_018ff17f TERMINATED ls_07d27b15 DONE ls_07d27b15 TERMINATED ls_0ce90e4a D…
  15m0s [lead] Time is up. Collecting results.
  15m0s [lead] → bash #5 {"command":"ls \"$RUN_DIR/results\" | wc -l","timeout":60}
- 15m0s [lead] ← bash #5 53
+ 15m0s [lead] ← bash #5 50
  15m0s [lead] Done.
  15m0s [lead] finished; run directory: /tmp/out/B/run-1/run
 {
   "code": 200,
   "name": "COMPLETED",
-  "lease": "ls_a345ca47",
+  "lease": "ls_b0c9242e",
   "kind": "lead",
   "mem_basis": "working_set",
-  "peak": 6740992000,
+  "peak": 7070404608,
   "limit": 9663676416,
   "enforcement": "hard",
   "evidence": {
     "exit_code": 0,
-    "reaped_pids": 21
+    "reaped_pids": 38,
+    "top_procs": [
+      {
+        "memory": 8593408,
+        "name": "subactl",
+        "pid": 85350
+      },
+      {
+        "memory": 8339456,
+        "name": "subactl",
+        "pid": 86184
+      }
+    ]
   },
-  "message": "lead ls_a345ca47 completed: its main process exited with status 0.",
-  "at": "2026-11-17T14:28:23.157709126Z"
+  "message": "lead ls_b0c9242e completed: its main process exited with status 0.",
+  "at": "2026-11-17T21:28:41.877371439Z"
 }

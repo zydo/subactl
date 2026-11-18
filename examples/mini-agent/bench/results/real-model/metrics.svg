@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 300" font-family="sans-serif" font-size="12">
+<rect width="900" height="300" fill="white"/>
+<text x="90.0" y="22" text-anchor="middle" font-weight="bold">Processes left after 60s</text>
+<line x1="20.0" y1="260.0" x2="170.0" y2="260.0" stroke="#999"/>
+<rect x="29.0" y="105.1" width="57.0" height="154.9" fill="#c0392b" fill-opacity="0.8"/>
+<line x1="51.5" y1="60.0" x2="63.5" y2="60.0" stroke="#222" stroke-width="1"/>
+<line x1="51.5" y1="150.2" x2="63.5" y2="150.2" stroke="#222" stroke-width="1"/>
+<text x="57.5" y="276.0" text-anchor="middle">A</text>
+<text x="57.5" y="100.1" text-anchor="middle" fill="#222">118.5</text>
+<rect x="94.0" y="260.0" width="57.0" height="0.0" fill="#2c6fbb" fill-opacity="0.8"/>
+<line x1="116.5" y1="260.0" x2="128.5" y2="260.0" stroke="#222" stroke-width="1"/>
+<line x1="116.5" y1="260.0" x2="128.5" y2="260.0" stroke="#222" stroke-width="1"/>
+<text x="122.5" y="276.0" text-anchor="middle">B</text>
+<text x="122.5" y="255.0" text-anchor="middle" fill="#222">0</text>
+<text x="270.0" y="22" text-anchor="middle" font-weight="bold">Hits of the chamber cap</text>
+<line x1="200.0" y1="260.0" x2="350.0" y2="260.0" stroke="#999"/>
+<rect x="209.0" y="155.0" width="57.0" height="105.0" fill="#c0392b" fill-opacity="0.8"/>
+<line x1="231.5" y1="250.0" x2="243.5" y2="250.0" stroke="#222" stroke-width="1"/>
+<line x1="231.5" y1="60.0" x2="243.5" y2="60.0" stroke="#222" stroke-width="1"/>
+<text x="237.5" y="276.0" text-anchor="middle">A</text>
+<text x="237.5" y="150.0" text-anchor="middle" fill="#222">41250.5</text>
+<rect x="274.0" y="260.0" width="57.0" height="0.0" fill="#2c6fbb" fill-opacity="0.8"/>
+<line x1="296.5" y1="260.0" x2="308.5" y2="260.0" stroke="#222" stroke-width="1"/>
+<line x1="296.5" y1="260.0" x2="308.5" y2="260.0" stroke="#222" stroke-width="1"/>
+<text x="302.5" y="276.0" text-anchor="middle">B</text>
+<text x="302.5" y="255.0" text-anchor="middle" fill="#222">0</text>
+<text x="450.0" y="22" text-anchor="middle" font-weight="bold">Packages completed</text>
+<line x1="380.0" y1="260.0" x2="530.0" y2="260.0" stroke="#999"/>
+<rect x="389.0" y="60.0" width="57.0" height="200.0" fill="#c0392b" fill-opacity="0.8"/>
+<line x1="411.5" y1="60.0" x2="423.5" y2="60.0" stroke="#222" stroke-width="1"/>
+<line x1="411.5" y1="60.0" x2="423.5" y2="60.0" stroke="#222" stroke-width="1"/>
+<text x="417.5" y="276.0" text-anchor="middle">A</text>
+<text x="417.5" y="55.0" text-anchor="middle" fill="#222">100%</text>
+<rect x="454.0" y="60.0" width="57.0" height="200.0" fill="#2c6fbb" fill-opacity="0.8"/>
+<line x1="476.5" y1="60.0" x2="488.5" y2="60.0" stroke="#222" stroke-width="1"/>
+<line x1="476.5" y1="60.0" x2="488.5" y2="60.0" stroke="#222" stroke-width="1"/>
+<text x="482.5" y="276.0" text-anchor="middle">B</text>
+<text x="482.5" y="55.0" text-anchor="middle" fill="#222">100%</text>
+<text x="630.0" y="22" text-anchor="middle" font-weight="bold">Subtasks lost and redone</text>
+<line x1="560.0" y1="260.0" x2="710.0" y2="260.0" stroke="#999"/>
+<rect x="569.0" y="193.3" width="57.0" height="66.7" fill="#c0392b" fill-opacity="0.8"/>
+<line x1="591.5" y1="260.0" x2="603.5" y2="260.0" stroke="#222" stroke-width="1"/>
+<line x1="591.5" y1="126.7" x2="603.5" y2="126.7" stroke="#222" stroke-width="1"/>
+<text x="597.5" y="276.0" text-anchor="middle">A</text>
+<text x="597.5" y="188.3" text-anchor="middle" fill="#222">2</text>
+<rect x="634.0" y="60.0" width="57.0" height="200.0" fill="#2c6fbb" fill-opacity="0.8"/>
+<line x1="656.5" y1="60.0" x2="668.5" y2="60.0" stroke="#222" stroke-width="1"/>
+<line x1="656.5" y1="60.0" x2="668.5" y2="60.0" stroke="#222" stroke-width="1"/>
+<text x="662.5" y="276.0" text-anchor="middle">B</text>
+<text x="662.5" y="55.0" text-anchor="middle" fill="#222">6</text>
+<text x="810.0" y="22" text-anchor="middle" font-weight="bold">Mean utilisation</text>
+<line x1="740.0" y1="260.0" x2="890.0" y2="260.0" stroke="#999"/>
+<rect x="749.0" y="84.6" width="57.0" height="175.4" fill="#c0392b" fill-opacity="0.8"/>
+<line x1="771.5" y1="60.0" x2="783.5" y2="60.0" stroke="#222" stroke-width="1"/>
+<line x1="771.5" y1="109.1" x2="783.5" y2="109.1" stroke="#222" stroke-width="1"/>
+<text x="777.5" y="276.0" text-anchor="middle">A</text>
+<text x="777.5" y="79.6" text-anchor="middle" fill="#222">39.5%</text>
+<rect x="814.0" y="220.2" width="57.0" height="39.8" fill="#2c6fbb" fill-opacity="0.8"/>
+<line x1="836.5" y1="220.8" x2="848.5" y2="220.8" stroke="#222" stroke-width="1"/>
+<line x1="836.5" y1="219.6" x2="848.5" y2="219.6" stroke="#222" stroke-width="1"/>
+<text x="842.5" y="276.0" text-anchor="middle">B</text>
+<text x="842.5" y="215.2" text-anchor="middle" fill="#222">9%</text>
+</svg>
