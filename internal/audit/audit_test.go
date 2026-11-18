@@ -24,7 +24,7 @@ func TestWriteReadAndSuggest(t *testing.T) {
 	for i := 1; i <= 20; i++ {
 		l.Write(Record{At: day2, Type: TypeTerminate, Lease: "r", Termination: &api.Termination{Code: 200, Kind: "renderer", Peak: int64(i) * 10 * mib, MemBasis: api.BasisWorkingSet}})
 	}
-	l.Write(Record{At: day2, Type: TypeTerminate, Lease: "w", Termination: &api.Termination{Code: 200, Kind: "renderer", Peak: 9000 * mib, MemBasis: api.BasisCommit}})
+	l.Write(Record{At: day2, Type: TypeTerminate, Lease: "w", Termination: &api.Termination{Code: 200, Kind: "renderer", Peak: 9000 * mib, MemBasis: api.BasisPhysFootprint}})
 	// Leases that did not run to completion are not measurements of need:
 	// one killed at its limit, one killed by its planner, one aborted.
 	for _, code := range []int{413, 499, 520} {

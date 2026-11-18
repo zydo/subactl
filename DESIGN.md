@@ -49,7 +49,7 @@ v1 要解决六个问题：
 
 目标（v1）：
 
-1. 交付 Go 编写的 daemon `subactld` 与 CLI `subactl`（含 `subactl top`、`subactl trace`）。契约只有 `api/openapi.yaml`，v1 只提供一个用标准库手写的公开 Go client 包，由 CI 对照契约校验一致性。整个项目只用 Go 标准库和官方扩展库 golang.org/x/sys、golang.org/x/term，不引入第三方依赖（实现：YAML 用自写的严格子集解析器 `yamlite`，实验数据的 Parquet 文件由手写的最小 writer 生成）。Linux（cgroup v2）是 v1 的主平台；macOS 做到 monitor 级别并已交付（实现）；Windows 推迟，不在 v1 内。cgroup v1 不在 v1 范围内。
+1. 交付 Go 编写的 daemon `subactld` 与 CLI `subactl`（含 `subactl top`、`subactl trace`）。契约只有 `api/openapi.yaml`，v1 只提供一个用标准库手写的公开 Go client 包，由 CI 对照契约校验一致性。整个项目只用 Go 标准库和官方扩展库 golang.org/x/sys、golang.org/x/term，不引入第三方依赖（实现：YAML 用自写的严格子集解析器 `yamlite`，实验数据的 Parquet 文件由手写的最小 writer 生成）。subactl 只支持 Linux 和 macOS：Linux（cgroup v2）是主平台，macOS 做到 monitor 级别。cgroup v1 不在范围内。
 2. 管理的资源维度：内存硬限、CPU、进程数、wall time、输出上限。
 3. 提供不超卖的配额账本，并支持对运行中的 subagent 调整配额。
 4. acgroup 结束时整组回收。结束的原因可以是主进程退出、父节点退出（包括 lead 的终端被关闭）或外部中止。
@@ -62,25 +62,25 @@ v1 要解决六个问题：
 - 超卖，以及自动压力处理（施压、暂停、自主选择 victim）。
 - 多机部署与 Kubernetes。
 - 修复 agent harness 自身的内存泄漏。subactld 只限制它的爆炸半径。
-- 文件系统与网络沙箱。因此，agent 通过 IPC 请第三方代为启动进程造成的逃逸不在 v1 防护范围内，例如 `systemd-run --user`、tmux server、docker daemon、Windows 的 WMI 或计划任务：新进程不是 agent 的后代，通常也不继承它的环境变量。同一目录下的多个 agent 同时修改同一文件也不在防护范围内（实现中用真实模型观察到过，三个子 agent 同时改了同一个共享文件）。
+- 文件系统与网络沙箱。因此，agent 通过 IPC 请第三方代为启动进程造成的逃逸不在 v1 防护范围内，例如 `systemd-run --user`、tmux server、docker daemon、launchd：新进程不是 agent 的后代，通常也不继承它的环境变量。同一目录下的多个 agent 同时修改同一文件也不在防护范围内（实现中用真实模型观察到过，三个子 agent 同时改了同一个共享文件）。
 - 磁盘配额。不设输出上限的 lease，其输出会无限制地写进 scratch 目录。
 - subactld 自身崩溃后保持 lease 继续运行。v1 采用 fail-closed，见"核心模型"。
 - cgroup v1、暂停与恢复。
 - LLM 额度管理。额度耗尽按外部中止处理，终止码为 520 EXTERNAL\_ABORT。
-- Windows（Job Object backend）。原计划 v1.1，现推迟，未定期（实现）。
+- Windows。最初计划在 v1.1 用 Job Object 实现，现已移出范围：subactl 只支持 Linux 和 macOS。
 - 在同一进程内隔离单个 subagent。subagent 必须以独立进程运行。
 - 第三方 harness 及其内部自行派生的 subagent。
 - 其余推迟的机制见文末的"v2 预留"一节。
 
 ## 术语与跨平台映射（规范）
 
-核心层只使用本节定义的抽象术语；cgroup、Job Object、kqueue 这类平台机制只允许出现在 backend 中。每个 backend 必须为每项能力声明强制等级，任何平台差异都要显式暴露，不得静默降级。
+核心层只使用本节定义的抽象术语；cgroup、kqueue 这类平台机制只允许出现在 backend 中。每个 backend 必须为每项能力声明强制等级，任何平台差异都要显式暴露，不得静默降级。
 
 **术语定义**：
 
 | 术语 | 定义 |
 | --- | --- |
-| acgroup（agent control group） | 一组进程的资源边界。子孙进程自动归属于它；由 backend 创建和销毁。命名类比 Linux 的 cgroup，但它是跨平台抽象：在 Linux 上由 cgroup v2 实现，在 Windows 上由 Job Object 实现，并不等于 cgroup |
+| acgroup（agent control group） | 一组进程的资源边界。子孙进程自动归属于它；由 backend 创建和销毁。命名类比 Linux 的 cgroup，但它是跨平台抽象：在 Linux 上由 cgroup v2 实现，在 macOS 上由进程组加 subactld 的归属表实现，并不等于 cgroup |
 | acgroup 树 | acgroup 按 lease 层级嵌套，子 acgroup 的限额不超过父 acgroup。它是 agent 主从关系的唯一映射；OS 的父子进程关系不承担归属职责 |
 | lease | 一个 agent 节点在 subactld 中的登记与配额凭证。每个 lease 对应一个 acgroup、一个主进程和一个终止码；状态为 admitted → running → reaping → reaped |
 | envelope | 申请 lease 时提交的各维度上限：memory、memory\_self、cpu、pids、wall、output |
@@ -90,7 +90,7 @@ v1 要解决六个问题：
 | operator | 不属于任何 acgroup 的调用方，即人或人运行的工具，按 uid 授权 |
 | 归属（membership） | 判断某个进程属于哪个 acgroup 的唯一真相源，由 backend 提供。PPID 和进程组只作辅助。归属同时是调用 subactld 时的身份依据 |
 | 有效容量 | 可供所有顶层 lease 分配的内存总量：min(配置上限, MemTotal − 预留线 − 外部占用)。外部占用指不由 subactld 管理的进程的内存；预留线是给系统留的余量，可用内存跌破它时触发兜底终止。预留线默认取 max(MemTotal × 15%, 8GiB)，但不超过 MemTotal 的一半（实现） |
-| 内存口径（mem\_basis） | 内存用量的度量方式。三个平台口径不同，所有用量数据都必须带上口径标签：working\_set、commit、phys\_footprint |
+| 内存口径（mem\_basis） | 内存用量的度量方式。两个平台口径不同，所有用量数据都必须带上口径标签：working\_set、phys\_footprint |
 | 内存硬限（mem.hard） | 超过后整个 acgroup 被终止。各平台达到这一语义的方式不同，见下表 |
 | 整组终止（kill\_tree） | 终止 acgroup 内的全部进程，并验证剩余进程数为 0 |
 | 终止码 | 每个 lease 结束时产出且只产出一个的结束原因编码，按 HTTP 风格分为 2xx 正常、4xx 超出自身配额或被主动终止、5xx 环境原因，见"终止码与审计" |
@@ -102,20 +102,20 @@ v1 要解决六个问题：
 
 **各平台的实现**（格式为"机制 / 强制等级"）：
 
-| 能力 | Linux（cgroup v2） | Windows（Job Object） | macOS 原生 | macOS + Linux VM |
-| --- | --- | --- | --- | --- |
-| acgroup | cgroup 目录；限额设在 lease 目录上，进程放在其叶子 `_self/` 中（见核心模型） | Job Object（Windows 8 起支持嵌套） | 进程组 + subactld 归属表 | VM 内的 cgroup |
-| 归属 | 子进程自动继承 / hard | 子进程自动进入 job / hard | 每次采样时扫描进程表，按父子链和进程组登记；成员表落盘，供重启后的 fail-closed 清理 / soft（NOTE\_FORK 不带子进程 pid，NOTE\_TRACK 不可用） | hard |
-| 内存口径 | working\_set：memory.current − inactive\_file | commit：私有提交内存 | phys\_footprint 之和 | working\_set |
-| 内存硬限 | memory.max + memory.oom.group / hard | job memory limit（限的是 commit）。超限时只是分配失败、不终止进程，subactld 收到 JOB\_OBJECT\_MSG\_JOB\_MEMORY\_LIMIT 后调用 TerminateJobObject / hard | 每 200 毫秒检查一次（实现），超限即整组终止，记 413 / monitor\_only | hard |
-| CPU | cpu.max / hard | CPU rate control / hard | monitor\_only | hard |
-| 进程数 | pids.max / hard | active process limit / hard | monitor\_only | hard |
-| 整组终止 | cgroup.kill / hard | TerminateJobObject / hard | 遍历归属表逐个 kill 并验证 / soft | hard |
-| 父节点死亡检测 | pidfd / hard | 等待进程句柄 / hard | kqueue NOTE\_EXIT / soft | 跨 VM 心跳 / soft |
-| 防逃逸（经 cgroupfs 或 breakaway 脱离） | cgroup namespace + 内核的迁移可达性检查 + no\_new\_privs（实现）/ hard | 禁止 breakaway / hard | unsupported。实现：按环境标记事后检测也做不到，macOS 的 `kern.procargs2` 对普通用户只给出其他进程的参数、不给环境变量（daemon 在 macOS 上以普通用户运行） | hard |
-| 调用方身份 | SO\_PEERCRED → 所在 acgroup；6.5+ 另取 SO\_PEERPIDFD，查完归属后确认调用方仍存活 / hard | GetNamedPipeClientProcessId + IsProcessInJob / hard | LOCAL\_PEERPID → 归属表 / soft | hard |
-| 宿主可用内存 | `/proc/meminfo` 的 MemAvailable；在受限的外层 cgroup 里可改用该 cgroup 的 memory.max 与用量（实现） | 可用物理内存 | `kern.memorystatus_level`，即内核内存压力机制认为可用的比例（实现） | VM 内的 meminfo |
-| 交付阶段 | v1 | 推迟（实现） | v1（monitor，实现） | v2 |
+| 能力 | Linux（cgroup v2） | macOS 原生 | macOS + Linux VM |
+| --- | --- | --- | --- |
+| acgroup | cgroup 目录；限额设在 lease 目录上，进程放在其叶子 `_self/` 中（见核心模型） | 进程组 + subactld 归属表 | VM 内的 cgroup |
+| 归属 | 子进程自动继承 / hard | 每次采样时扫描进程表，按父子链和进程组登记；成员表落盘，供重启后的 fail-closed 清理 / soft（NOTE\_FORK 不带子进程 pid，NOTE\_TRACK 不可用） | hard |
+| 内存口径 | working\_set：memory.current − inactive\_file | phys\_footprint 之和 | working\_set |
+| 内存硬限 | memory.max + memory.oom.group / hard | 每 200 毫秒检查一次（实现），超限即整组终止，记 413 / monitor\_only | hard |
+| CPU | cpu.max / hard | monitor\_only | hard |
+| 进程数 | pids.max / hard | monitor\_only | hard |
+| 整组终止 | cgroup.kill / hard | 遍历归属表逐个 kill 并验证 / soft | hard |
+| 父节点死亡检测 | pidfd / hard | kqueue NOTE\_EXIT / soft | 跨 VM 心跳 / soft |
+| 防逃逸（经 cgroupfs 脱离） | cgroup namespace + 内核的迁移可达性检查 + no\_new\_privs（实现）/ hard | unsupported。实现：按环境标记事后检测也做不到，macOS 的 `kern.procargs2` 对普通用户只给出其他进程的参数、不给环境变量（daemon 在 macOS 上以普通用户运行） | hard |
+| 调用方身份 | SO\_PEERCRED → 所在 acgroup；6.5+ 另取 SO\_PEERPIDFD，查完归属后确认调用方仍存活 / hard | LOCAL\_PEERPID → 归属表 / soft | hard |
+| 宿主可用内存 | `/proc/meminfo` 的 MemAvailable；在受限的外层 cgroup 里可改用该 cgroup 的 memory.max 与用量（实现） | `kern.memorystatus_level`，即内核内存压力机制认为可用的比例（实现） | VM 内的 meminfo |
+| 交付阶段 | v1 | v1（monitor，实现） | v2 |
 
 **规则**：
 
@@ -123,8 +123,7 @@ v1 要解决六个问题：
 2. backend 启动时上报自己的能力矩阵，通过 `GET /v1/host` 对外暴露。acquire 中的 `require` 按强制等级匹配，达不到就返回 `enforcement_unavailable`。
 3. 所有用量数据都随附 `mem_basis`。不同口径的数值不能直接相加或比较。
 4. 某项能力缺失或等级较低时：内存硬限只有 monitor\_only（macOS 原生）时，不超卖只能近似保证，需要相应调高预留线，并由兜底终止补位；kill\_tree 只有 soft 时，每次终止后必须重新扫描归属表，确认没有残留。
-5. 表中"防逃逸 / hard"只覆盖经 cgroupfs 或 breakaway 脱离。请第三方代为启动进程的逃逸不在范围内，见非目标。
-6. Windows 的已知差异：commit 口径会把已提交但尚未使用的内存计算在内，数值通常高于 working set，配置限额时需要留出余量。由于 v1 采用 fail-closed，job 默认启用 KILL\_ON\_JOB\_CLOSE：subactld 崩溃时整组终止，与其他平台的语义一致。
+5. 表中"防逃逸 / hard"只覆盖经 cgroupfs 脱离。请第三方代为启动进程的逃逸不在范围内，见非目标。
 
 ## 核心模型：不变式、Lease 与 acgroup
 
@@ -182,7 +181,7 @@ subactld 对每个配额请求只回答两种结果：批准，或者拒绝并�
 - 降低：新值不得低于"当前用量 + 余量"。余量默认取当前用量的 10% 与 64MB 中的较大者。低于这个值时拒绝，reason 为 `below_usage`，以免调整本身直接把进程杀掉。
 - 降低到 `memory_self` 加上存活子 lease 的硬限之和以下时，同样拒绝，reason 为 `below_allocated`（实现）。
 - 节点不能调整自己的配额，返回 403 `self_resize_forbidden`（实现）；只能经 resize-request 向父节点申请。
-- 生效方式：Linux 直接修改 memory.max；Windows 修改 job 的内存上限；macOS 更新 monitor 的阈值。
+- 生效方式：Linux 直接修改 memory.max；macOS 更新 monitor 的阈值。
 
 **NEAR\_LIMIT 预警**：某个 acgroup 的内存用量达到自身硬限的 90%（可配置）时，subactld 推送 `NEAR_LIMIT` 事件，附带当前用量和增长速率。planner 可以选择三种处理：提高配额、任由它触限终止，或者主动终止它。subactld 本身不采取任何动作，除非 planner 事先声明了 `grow_to` 规则（见"声明式策略"）。实现：同一次越线只推送一次，用量回落到 85% 以下才重新武装；按 `grow_to` 扩容后，以新上限重新武装。事件同时作为控制消息投入该 lease 自己的 inbox。
 
@@ -198,13 +197,13 @@ subactld 对每个配额请求只回答两种结果：批准，或者拒绝并�
 
 planner 需要的所有数据，都来自 subactld 从 backend 读到的实测值，subagent 不汇报自己的用量。每条用量数据都带有 `mem_basis` 标签，不同口径的数值不能相加，也不能直接比较。
 
-| 指标 | Linux | Windows | macOS | 采样 |
-| --- | --- | --- | --- | --- |
-| acgroup 内存 | `working_set`：v2 为 `memory.current` − `inactive_file` | `commit` | `phys_footprint` 之和 | 每秒一次 |
-| 触限 / OOM | `memory.events` | job 通知 | 进程退出码与信号 | 事件驱动 |
-| CPU | `cpu.stat` | job 记账信息 | `proc_pid_rusage` | 每秒一次 |
-| 进程数 | `pids.current` | job 中的活跃进程数 | 归属表计数 | 每秒一次 |
-| 宿主可用内存 | `MemAvailable`，或外层 cgroup 的上限与用量（实现） | 可用物理内存 | `kern.memorystatus_level`（实现） | 每秒一次 |
+| 指标 | Linux | macOS | 采样 |
+| --- | --- | --- | --- |
+| acgroup 内存 | `working_set`：v2 为 `memory.current` − `inactive_file` | `phys_footprint` 之和 | 每秒一次 |
+| 触限 / OOM | `memory.events` | 进程退出码与信号 | 事件驱动 |
+| CPU | `cpu.stat` | `proc_pid_rusage` | 每秒一次 |
+| 进程数 | `pids.current` | 归属表计数 | 每秒一次 |
+| 宿主可用内存 | `MemAvailable`，或外层 cgroup 的上限与用量（实现） | `kern.memorystatus_level`（实现） | 每秒一次 |
 
 - **每个 acgroup 暴露的字段**：用量、限额、峰值、增长速率、CPU、进程数、状态、存活时长，以及 `mem_basis`。
 - **宿主暴露的字段**：有效容量、已分配额度、外部占用（非 subactld 管理的进程）、预留线，以及 backend 的能力矩阵。
@@ -250,7 +249,6 @@ type Backend interface {
 | cgroup2 | Linux unified，subactld 以 root 运行 | hard：memory.max + memory.oom.group | hard | cgroup.kill | 是 |
 | fake | 任意 | 内存模拟 | 内存模拟 | 模拟 | 是（用于测试 ledger 和准入） |
 | darwin-monitor | macOS | monitor\_only：采样 phys\_footprint，超限 kill | monitor\_only | 扫描归属表逐个 kill，再验证 | 是（实现）：`subactld --backend darwin`，macOS 上的默认值，可由普通用户运行 |
-| jobobject | Windows | hard：job memory limit（commit 口径），超限通知后 TerminateJobObject | hard | TerminateJobObject | 推迟（实现） |
 | systemd | Linux 非 root，user manager + Delegate=yes | 同 cgroup2 | hard | 同 cgroup2 | v2：没有 cgroup namespace 和独立 uid，防逃逸降为 soft |
 | cgroup1 | Linux hybrid / legacy | hard（max），没有 oom.group，需 subactld 补杀 | hard | 先冻结再遍历 | v2 |
 | linux-vm | macOS（Lima / OrbStack / Apple container） | 委托给 VM 内的 cgroup2 | hard | 同 cgroup2 | v2 |
@@ -270,7 +268,7 @@ type Backend interface {
 威胁模型与覆盖情况：
 
 - agent 把自己写进别的 cgroup（真实案例：[anthropics/claude-code#60488](https://github.com/anthropics/claude-code/issues/60488)）。由 cgroup namespace 挡住，hard：cgroup v2 要求迁移的源 cgroup 和目标 cgroup 都能从写入者的 cgroup namespace 中看到，否则返回 ENOENT。agent 以普通 uid 运行、对 cgroup 目录没有写权限，是第二道屏障。
-- double-fork 加 setsid。在 Linux 和 Windows 上不构成逃逸：cgroup 与 job 的归属随 fork 继承，与进程组无关。只对 macOS 原生有意义，由定时扫描归属表覆盖，soft。
+- double-fork 加 setsid。在 Linux 上不构成逃逸：cgroup 归属随 fork 继承，与进程组无关。只对 macOS 原生有意义，由定时扫描归属表覆盖，soft。
 - 调低自己的 oom\_score\_adj，让内核去杀别人。由 shim 设定的下限挡住（前提是 agent 没有 CAP\_SYS\_RESOURCE），且只影响全局 OOM。
 - （实现）借 sudo 等 setuid 程序提权为 root，再跳出 cgroup namespace。由 no\_new\_privs 挡住，hard。macOS 上没有对应机制，与"防逃逸：unsupported"的声明一致。
 - 通过 IPC 请第三方代为启动进程（`systemd-run --user`、tmux server、docker、WMI、计划任务）。新进程不是 agent 的后代，通常也不继承环境变量。不在 v1 范围内，需要沙箱，见非目标。
@@ -324,11 +322,11 @@ subactl/                         # module: github.com/zydo/subactl
   go.work                        # 开发时联接两个 module
 ```
 
-（实现：原计划的 internal/telemetry 落盘与 internal/backend/jobobject 未按原样出现，前者并入 audit，后者推迟。）
+（实现：原计划的 internal/telemetry 落盘未按原样出现，并入 audit；internal/backend/jobobject 随 Windows 移出范围。）
 
-依赖只能单向：`examples/mini-agent → client → api ← subactld`（实现：mini-agent 另外依赖公开的 `yamlite`；`internal/lint` 的测试会拒绝任何违反这些规则的 import）。mini-agent 是独立的 Go module，工具链保证它无法导入 subactl 的 `internal` 包，只能使用公开的 `client` 包和 CLI；它需要的能力如果只能从内部拿到，就说明公开契约有缺口。两个 module 放在同一个仓库，开发时用 `go.work` 联接，一次提交即可同时修改；mini-agent 有了独立用户之后再拆仓库。整个项目只依赖 Go 标准库和官方扩展库 `golang.org/x/sys`、`golang.org/x/term`，不引入第三方库。传输层是 HTTP/JSON，Linux 和 macOS 上走 Unix socket（权限 0660，属组 subactl；agent 以独立 uid 运行时需加入该组），Windows 上走 named pipe。
+依赖只能单向：`examples/mini-agent → client → api ← subactld`（实现：mini-agent 另外依赖公开的 `yamlite`；`internal/lint` 的测试会拒绝任何违反这些规则的 import）。mini-agent 是独立的 Go module，工具链保证它无法导入 subactl 的 `internal` 包，只能使用公开的 `client` 包和 CLI；它需要的能力如果只能从内部拿到，就说明公开契约有缺口。两个 module 放在同一个仓库，开发时用 `go.work` 联接，一次提交即可同时修改；mini-agent 有了独立用户之后再拆仓库。整个项目只依赖 Go 标准库和官方扩展库 `golang.org/x/sys`、`golang.org/x/term`，不引入第三方库。传输层是 HTTP/JSON，走 Unix socket（权限 0660，属组 subactl；agent 以独立 uid 运行时需加入该组）。
 
-**身份认证**：不发 token。subactld 从连接取得对端 pid，再由 backend 查出它所在的 acgroup，这个 acgroup 就是调用方的节点身份。取对端 pid 的方式：Linux 用 SO\_PEERCRED，6.5+ 用 SO\_PEERPIDFD 消除 pid 复用竞争；Windows 用 GetNamedPipeClientProcessId；macOS 用 LOCAL\_PEERPID。agent 的工具子进程与 agent 同属一个 acgroup，身份相同；子 lease 内的进程身份是子节点。不用 token 的原因：环境变量里的 token 可以被同 uid 进程从 `/proc/<pid>/environ` 读走，而 cgroup 归属在 v2 上无法伪造。不属于任何 acgroup 的进程是 operator（人），按 uid 授权，见"lead 与多 lead 隔离"。实现：身份在每个连接建立时确定一次；Linux 6.5+ 上用 SO\_PEERPIDFD 拿到对端的 pidfd，查完归属后确认对端仍然存活，从而排除 pid 被复用给另一个进程的情况。
+**身份认证**：不发 token。subactld 从连接取得对端 pid，再由 backend 查出它所在的 acgroup，这个 acgroup 就是调用方的节点身份。取对端 pid 的方式：Linux 用 SO\_PEERCRED，6.5+ 用 SO\_PEERPIDFD 消除 pid 复用竞争；macOS 用 LOCAL\_PEERPID。agent 的工具子进程与 agent 同属一个 acgroup，身份相同；子 lease 内的进程身份是子节点。不用 token 的原因：环境变量里的 token 可以被同 uid 进程从 `/proc/<pid>/environ` 读走，而 cgroup 归属在 v2 上无法伪造。不属于任何 acgroup 的进程是 operator（人），按 uid 授权，见"lead 与多 lead 隔离"。实现：身份在每个连接建立时确定一次；Linux 6.5+ 上用 SO\_PEERPIDFD 拿到对端的 pidfd，查完归属后确认对端仍然存活，从而排除 pid 被复用给另一个进程的情况。
 
 | 方法 | 路径 | 作用 |
 | --- | --- | --- |
@@ -650,7 +648,7 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 
 ## 验收标准
 
-功能标准 F1–F33 需要在 Linux cgroup v2 环境下全部通过；Windows 和 macOS 按各自能力矩阵声明的等级验收。实验标准 E1–E3 必须达成。每一条都要有对应的自动化测试或实验脚本。
+功能标准 F1–F33 需要在 Linux cgroup v2 环境下全部通过；macOS 按其能力矩阵声明的等级验收。实验标准 E1–E3 必须达成。每一条都要有对应的自动化测试或实验脚本。
 
 实现状态（2026-11-17）：`[x]` 已达成，`[~]` 部分达成（缺口写在括注里）。F1–F33 全部达成。集成测试在四个 Linux 环境上通过：Docker Desktop（arm64）、GitHub Actions、VirtualBox VM（Ubuntu 26.04）、一台物理机（x86-64，以特权 Docker 运行）；macOS backend 的测试在本机与 GitHub Actions 的 macOS 作业上通过。
 
@@ -668,7 +666,7 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 - [x] F10 终止码归因：逐一注入 413、408、414、451、499、503、502、520、410 对应的故障，每个终止的 lease 都恰好产出一个与注入一致的终止码，准确率 100%。（实现：真实内核上逐一注入 11 种故障（含 200、204），11 个终止码全部正确，连续三次）
 - [x] F11 输出上限：输出超限后整组终止（414），输出文件大小不超过上限加 1 秒的写入量。（实现：实现后为精确上限：文件大小恰等于上限，输出不计入 lease 内存）
 - [x] F12 fail-closed 重启：对 subactld 执行 kill -9 后，停机期间各 acgroup 的硬限仍然生效；重启后 5 秒内，重启前存在的全部 acgroup 进程数归零，终止码 500。（实现：集成测试；systemd 下 daemon 被 kill -9 后一秒内重启，无残留）
-- [x] F13 等级如实：macOS monitor 和 Windows backend 都报告真实的强制等级；当 backend 达不到 require 声明的等级时，返回 enforcement\_unavailable。（实现：Linux 与 macOS backend 都如实报告；Windows 推迟）
+- [x] F13 等级如实：macOS monitor backend 报告真实的强制等级；当 backend 达不到 require 声明的等级时，返回 enforcement\_unavailable。（实现：Linux 与 macOS backend 都如实报告）
 - [x] F14 嵌套：子 acgroup 的用量计入父 acgroup 的配额；父 acgroup 触限或终止时，整棵子树全部回收；父节点自身进程位于 `_self/` 叶子，创建嵌套 lease 时不出现 EBUSY。（实现：集成测试）
 - [x] F15 lead 级联：已登记的 lead 被 SIGKILL 后，其整棵子树在 5 秒内进程数归零。（实现：同 F1；另在 VM 上断开 SSH 会话实测）
 - [x] F16 子树权限：子节点进程去终止兄弟节点、给自己扩容、向兄弟节点发送消息，全部返回 403，且没有任何副作用；读取其他节点的环境变量无法冒充该节点。（实现：单元测试；身份只取自连接对端所在的 cgroup，不读任何环境变量）
@@ -709,7 +707,7 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 | 不超卖导致利用率低 | 同时能跑的 subagent 变少 | 用 suggest() 收紧初始配额，NEAR\_LIMIT 时扩容；用实验 H3 量化效果 |
 | 外部负载突然增长 | I-B 暂时不成立 | 容量缩水时先拒绝新请求；MemAvailable 跌破预留线才兜底终止，CAPACITY\_SHRUNK 先给 planner 一个窗口 |
 | agent 主动逃逸（[anthropics/claude-code#60488](https://github.com/anthropics/claude-code/issues/60488)） | 硬限失效 | cgroup namespace、独立 uid、逃逸扫描，见 F3 |
-| 各平台口径不一致（Windows 的 commit 口径通常偏大） | 同一组配额在不同平台上的表现不同 | 所有数据都带 mem\_basis；配额建议按平台分别统计 |
+| 各平台口径不一致（macOS 的 phys\_footprint 含压缩内存，与 Linux 的 working set 不同） | 同一组配额在不同平台上的表现不同 | 所有数据都带 mem\_basis；配额建议按平台分别统计 |
 | macOS 只能做到 monitor 级别 | 硬限不可靠 | 如实标注等级，调高预留线；需要硬限时走 Linux VM（v2）。实现：预留线为 25%，超限检查每 200 毫秒一次，见开放问题 1 |
 | 模拟与现实有偏差 | 实验结论难以外推 | 演示任务用真实仓库，真实的 yarn、tsc 和 Chrome；scripted 的结论再用 real 大脑抽样复核，并用 subactl run 包装第三方 agent 验证 |
 | 自研 harness 的边界情况 | 流式解析、edit 匹配等细节出错，影响实验稳定性 | 范围只限 demo 所需（一家 provider、顺序执行工具、行模式 TUI）；对实验结论起决定作用的是 scripted 大脑，它不经过网络和解析路径；real 大脑的 SSE 解析用录制的响应做回归测试 |
@@ -730,9 +728,9 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 4. M3 配额与可观测：不超卖准入、配额调整、NEAR\_LIMIT、容量缩水与兜底终止、计量、终止码、审计、suggest()、`/metrics`、时间线与 `subactl trace`。达成 F5–F11、F30–F32。
 5. M4 agent 树与通信：lead（pty 与自包装）、基于归属的身份认证与子树权限、operator 权限、多 lead 隔离、inbox、优雅终止、声明式策略、进度信标与闲置检测、`subactl top`。达成 F15–F29、F33。
 6. M5 实验：B、C 两组的对照实验与报告；real 大脑演示。达成 E2、E3。
-7. M6 跨平台：Windows Job Object backend（v1.1），以及 macOS monitor backend。
+7. M6 跨平台：macOS monitor backend（最初还包括 Windows Job Object backend，现已移出范围）。
 
-实现状态：M0–M5 已完成；M6 只完成 macOS monitor backend，Windows 推迟。实际顺序与上表一致，M4 之后又按验证中发现的问题补做了 daemon 的 systemd 托管、no\_new\_privs、输出经由 daemon 转写等。
+实现状态：M0–M5 已完成；M6 交付了 macOS monitor backend；Windows 已移出范围。实际顺序与上表一致，M4 之后又按验证中发现的问题补做了 daemon 的 systemd 托管、no\_new\_privs、输出经由 daemon 转写等。
 
 ## v2 预留
 
@@ -762,7 +760,7 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 
 | 缩写 | 全称 | 在本文中的含义 |
 | --- | --- | --- |
-| acgroup | agent control group | 本文的核心抽象：一组进程的资源边界，子孙进程自动归属。命名类比 cgroup，但跨平台，在 Linux 上由 cgroup 实现、在 Windows 上由 Job Object 实现，详见术语一节 |
+| acgroup | agent control group | 本文的核心抽象：一组进程的资源边界，子孙进程自动归属。命名类比 cgroup，但跨平台，在 Linux 上由 cgroup 实现、在 macOS 上由进程组与归属表实现，详见术语一节 |
 | cgroup | control group | Linux 内核把进程分组并施加资源限额的机制，分 v1 和 v2 两代；本文 v1 只支持 v2 |
 | cgroupns | cgroup namespace | 让进程把某个 cgroup 当作自己的根；v2 上还限制它把进程迁移到这个根之外 |
 | pidfd | process file descriptor | 指向某个进程的文件描述符（Linux 5.3+），可以没有 pid 复用竞争地监视进程退出 |
@@ -777,7 +775,7 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 | SSE | Server-Sent Events | 基于 HTTP 的服务端单向事件推送 |
 | VM | Virtual Machine | 虚拟机 |
 | VSZ | Virtual Set Size | 进程映射的全部虚拟地址空间，含未实际占用的预留部分；数值往往远大于实际内存占用，不能作为资源决策依据 |
-| working set | — | Linux 上的内存口径：cgroup 内存用量减去可回收的 inactive file cache。Windows 和 macOS 的口径见术语一节 |
+| working set | — | Linux 上的内存口径：cgroup 内存用量减去可回收的 inactive file cache。macOS 的口径见术语一节 |
 
 说明：文中引用的 Claude Code issue，只用作真实 agent 场景里的典型故障案例，证明这些问题确实存在。它们不是设计依据，Claude Code 也不是参考实现；subactld 的行为只由本文定义。
 
@@ -798,7 +796,7 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 正文中标为“（实现）”的地方已经写明实际做法。按类别汇总如下，便于对照最初的设计。
 
 **范围**
-- macOS monitor backend 已交付；Windows 推迟，不在 v1 内。
+- 只支持 Linux 和 macOS。macOS monitor backend 已交付；Windows 原计划 v1.1，已移出范围。
 - YAML 用自写的严格子集解析器，Parquet 用手写的最小 writer，以保持零第三方依赖。
 
 **API 与 CLI**

@@ -60,7 +60,7 @@ The design is in [DESIGN.md](DESIGN.md). The only contract is
   there as an ordinary user. The effective capacity follows the kernel's
   own memory-pressure figure, in whole percent and after compression, so
   it moves less than the memory other programs allocate.
-- Not done: the Windows backend, which is deferred.
+- Only Linux and macOS are supported; Windows is out of scope.
 
 ## Try it
 

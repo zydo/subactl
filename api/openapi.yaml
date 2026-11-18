@@ -356,7 +356,7 @@ components:
       enum: [hard, soft, monitor_only, unsupported]
     MemBasis:
       type: string
-      enum: [working_set, commit, phys_footprint]
+      enum: [working_set, phys_footprint]
     State:
       type: string
       enum: [admitted, running, reaping, reaped]

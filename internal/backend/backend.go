@@ -1,5 +1,5 @@
 // Package backend defines the enforcement backend: the only place where
-// platform mechanisms (cgroup, Job Object, kqueue) may appear. The core
+// platform mechanisms (cgroup, kqueue) may appear. The core
 // speaks only in the abstract terms of the design: acgroup, envelope,
 // membership, kill_tree.
 package backend

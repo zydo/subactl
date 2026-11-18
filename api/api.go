@@ -56,7 +56,6 @@ type MemBasis string
 
 const (
 	BasisWorkingSet    MemBasis = "working_set"
-	BasisCommit        MemBasis = "commit"
 	BasisPhysFootprint MemBasis = "phys_footprint"
 )
 
