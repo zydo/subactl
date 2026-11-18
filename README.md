@@ -7,7 +7,7 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/zydo/subactl?color=6e7781&amp;style=for-the-badge&amp;labelColor=1f2328"></a>
 </p>
 
-<p align="center">English | <a href="README.zh-CN.md">简体中文</a></p>
+<p align="center">English | <a href="README.zh-CN.md">中文</a></p>
 
 <p align="center"><img src="docs/assets/how-subactl-works.svg" alt="How subactl works: a lead agent's lease holds its workers' leases; a worker over its limit is ended with everything it started" width="880"></p>
 

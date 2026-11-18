@@ -1,4 +1,4 @@
-[English](tutorial.md) | 简体中文
+[English](tutorial.md) | 中文
 
 # 在 subactl 之上构建你自己的 multi-agent harness
 

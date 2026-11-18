@@ -1,4 +1,4 @@
-English | [简体中文](design.zh-CN.md)
+English | [中文](design.zh-CN.md)
 
 # Subagent Controller: single-host resource management for subagents
 

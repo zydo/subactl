@@ -1,4 +1,4 @@
-English | [简体中文](benchmark.zh-CN.md)
+English | [中文](benchmark.zh-CN.md)
 
 # The benchmark
 

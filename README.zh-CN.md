@@ -7,7 +7,7 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/zydo/subactl?color=6e7781&amp;style=for-the-badge&amp;labelColor=1f2328"></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> | 简体中文</p>
+<p align="center"><a href="README.md">English</a> | 中文</p>
 
 <p align="center"><img src="docs/assets/how-subactl-works.zh-CN.svg" alt="subactl 如何工作：lead agent 的 lease 里装着各个 worker 的 lease；超限的 worker 连同它启动的一切被终止" width="880"></p>
 

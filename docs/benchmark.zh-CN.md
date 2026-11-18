@@ -1,4 +1,4 @@
-[English](benchmark.md) | 简体中文
+[English](benchmark.md) | 中文
 
 # 基准测试
 

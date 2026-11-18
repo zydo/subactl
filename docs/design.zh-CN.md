@@ -1,4 +1,4 @@
-[English](design.md) | 简体中文
+[English](design.md) | 中文
 
 # Subagent Controller：单机 subagent 资源管理设计
 

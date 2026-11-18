@@ -1,4 +1,4 @@
-English | [简体中文](testing.zh-CN.md)
+English | [中文](testing.zh-CN.md)
 
 # Testing
 

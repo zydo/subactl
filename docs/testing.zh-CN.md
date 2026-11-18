@@ -1,4 +1,4 @@
-[English](testing.md) | 简体中文
+[English](testing.md) | 中文
 
 # 测试
 

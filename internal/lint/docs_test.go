@@ -143,13 +143,13 @@ func TestDocTranslations(t *testing.T) {
 			en, zh = name, strings.TrimSuffix(name, ".md")+".zh-CN.md"
 		}
 		want := map[string]string{
-			en: "English | [简体中文](" + zh + ")",
-			zh: "[English](" + en + ") | 简体中文",
+			en: "English | [中文](" + zh + ")",
+			zh: "[English](" + en + ") | 中文",
 		}
 		if dir == "" { // the README centers it, which takes HTML
 			want = map[string]string{
-				en: `<p align="center">English | <a href="` + zh + `">简体中文</a></p>`,
-				zh: `<p align="center"><a href="` + en + `">English</a> | 简体中文</p>`,
+				en: `<p align="center">English | <a href="` + zh + `">中文</a></p>`,
+				zh: `<p align="center"><a href="` + en + `">English</a> | 中文</p>`,
 			}
 		}
 		for file, first := range want {
