@@ -146,6 +146,12 @@ func TestDocTranslations(t *testing.T) {
 			en: "English | [简体中文](" + zh + ")",
 			zh: "[English](" + en + ") | 简体中文",
 		}
+		if dir == "" { // the README centers it, which takes HTML
+			want = map[string]string{
+				en: `<p align="center">English | <a href="` + zh + `">简体中文</a></p>`,
+				zh: `<p align="center"><a href="` + en + `">English</a> | 简体中文</p>`,
+			}
+		}
 		for file, first := range want {
 			data, err := os.ReadFile(filepath.Join(root, dir, file))
 			if err != nil {
