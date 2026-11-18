@@ -1,0 +1,29 @@
+name: govulncheck
+# Known vulnerabilities in the code subactl actually calls: its two
+# dependencies and the standard library. Weekly as well as on every push,
+# because a new advisory can affect code that has not changed; the daemon
+# runs as root.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  govulncheck:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      # The latest stable Go, not go.mod's minimum: the standard library it
+      # checks is the one the binaries are built with. A finding there means
+      # building with a newer Go, or raising go.mod's minimum.
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - run: govulncheck ./...
+      - run: govulncheck ./...
+        working-directory: examples/mini-agent

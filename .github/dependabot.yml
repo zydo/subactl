@@ -1,0 +1,25 @@
+# Keep dependencies current with as little noise as possible: one grouped
+# pull request a month per ecosystem.
+#
+# Not watched on purpose: the bench chamber's Docker base image
+# (examples/mini-agent/bench/chamber/Dockerfile, node:18-bookworm). The radix
+# task's baseline commit runs on Node 18; a newer base would change the
+# benchmark, not just update it.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directories:
+      - "/"
+      - "/examples/mini-agent"
+    schedule:
+      interval: monthly
+    groups:
+      go-modules:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
