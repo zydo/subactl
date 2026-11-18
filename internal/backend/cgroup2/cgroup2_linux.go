@@ -471,7 +471,14 @@ func readInt(path string) int64 {
 // those at pid_max (at most 2^22), so the bound below never applies; it
 // makes the conversion safe on a 32-bit int too.
 func count(path string) int {
-	return int(min(max(readInt(path), 0), math.MaxInt32))
+	n := readInt(path)
+	if n < 0 {
+		return 0
+	}
+	if n > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int(n)
 }
 
 // stat reads one key of a flat-keyed file such as memory.stat.

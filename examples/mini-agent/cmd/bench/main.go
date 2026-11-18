@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -102,6 +103,11 @@ func run(args []string) error {
 	gid, err := strconv.ParseUint(u.Gid, 10, 32)
 	if err != nil {
 		return fmt.Errorf("--user %q: gid %q: %w", *userName, u.Gid, err)
+	}
+	// They are kept as int (os.Chown takes int), which is 32 bits on some
+	// systems; ids that large do not occur in practice.
+	if uid > math.MaxInt32 || gid > math.MaxInt32 {
+		return fmt.Errorf("--user %q: uid %d or gid %d is too large", *userName, uid, gid)
 	}
 	self, err := os.Executable()
 	if err != nil {
