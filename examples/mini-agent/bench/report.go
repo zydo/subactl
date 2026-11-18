@@ -34,8 +34,10 @@ func LoadResults(dir string) ([]GroupData, error) {
 			return nil, fmt.Errorf("%s/summary.json: %w", name, err)
 		}
 		for _, r := range g.Runs {
+			// A run whose per-second series was lost still counts in the
+			// tables and verdicts; it is only missing from the charts.
 			series, err := readSeries(filepath.Join(dir, name, fmt.Sprintf("run-%d", r.Run), "series.jsonl"))
-			if err != nil {
+			if err != nil && !os.IsNotExist(err) {
 				return nil, err
 			}
 			g.Series = append(g.Series, series)
