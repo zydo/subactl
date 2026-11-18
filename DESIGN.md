@@ -156,7 +156,7 @@ subactld 自身的实现约束：
 | 输出量 | output | 否 | 整组终止，终止码 414。实现：agent 的 stdout/stderr 是管道，由 subactld 读出后写入 scratch 目录下的文件并计数；超限后 subactld 停止读取，写入方被管道阻塞，文件大小恰好等于上限，并在下一次检查（1 秒内）整组终止。这些输出不计入 lease 的内存。lead 写终端时，按中继的字节数计 |
 
 - **进程由 subactld 代为启动**：planner 不直接 fork subagent，而是由 subactld 通过 pre-exec shim 把 subagent 启动在对应的 acgroup 里。subactld 是主进程的父进程，直接 wait 就能拿到退出状态。OS 的父子进程关系不承担归属职责。
-- **主进程的退出如何归因**（实现）：退出码 0 记 200；非零退出或被信号终止记 520，退出码和信号写进 evidence。被信号终止时先看内存：若该 lease 或某个祖先的 acgroup 因自身硬限发生过整组 OOM（`memory.events.local` 的 `oom_group_kill`，旧内核退而看 `oom`），撞限的那一层记 413，被它带走的子树记 502。
+- **主进程的退出如何归因**（实现）：退出码 0 记 200；非零退出或被信号终止记 520，退出码和信号写进 evidence。被信号终止时先看内存：若该 lease 或某个祖先的 acgroup 的自身硬限被撞（`memory.events.local` 的 `oom`，它只记在被撞限的那一层），撞限的那一层记 413，被它带走的子树记 502；若都没有、而容量护栏被撞（见兜底终止），记 503。`oom_group_kill` 不能用来判断：实测它记在被整组杀掉的那一层，即使撞的是上一层的限。
 - **嵌套**：subagent 再派生 subagent 时，子 acgroup 嵌套在父 acgroup 之内，子的用量计入父的配额。cgroup v2 不允许一个已向子级启用 controller 的 cgroup 自己直接持有进程（no internal processes 规则），所以每个 lease 是一个目录：限额设在 `<lease>/` 上，lease 自己的进程放在叶子 `<lease>/_self/`，子 lease 放在 `<lease>/<child>/`。父级超限时内核在父级 OOM，memory.oom.group 会把整棵子树一起终止（413，子树级联）。
 - **父节点即 holder**：lease 的 holder 就是它的父节点。顶层 lease 的父节点是 启动它的 subactl run -it CLI 进程（即 lead 的 holder），嵌套 lease 的父节点是父 lease 的主进程。父节点一旦死亡（pidfd 检测），它名下的全部 lease 立即级联回收，终止码 502。单机上 pidfd 是精确的，所以 v1 不设 TTL 心跳，也不支持父节点重启后重新接管。实现：holder 是创建 lead 的那个 operator 进程，不论是否带 `-it`；`subactl run` 收到挂断信号时直接退出，由 daemon 按 502 回收（早先版本会先主动 kill，导致关终端记成 499）。macOS 用 kqueue 的 NOTE\_EXIT。
 - **主进程退出即回收**：lease 的主进程一旦退出，不论原因，lease 都立即进入 reaping，子孙进程一个不留。
@@ -190,6 +190,7 @@ subactld 对每个配额请求只回答两种结果：批准，或者拒绝并�
 
 - **容量缩水（只拒绝，不终止）**：外部占用增长，导致已分配的顶层硬限之和超过有效容量，即 I-B 暂时不成立。subactld 推送 `CAPACITY_SHRUNK`，此后新的 acquire 和提高配额一律拒绝（`capacity_shrunk`），直到恢复。已分配不等于已使用，所以此时不终止任何 acgroup。
 - **兜底终止（subactld 唯一的自主动作）**：宿主 MemAvailable 实际跌破预留线，并连续 3 次采样如此（滞回，避免抖动）。先推送 `CAPACITY_SHRUNK`，给 planner 一个短窗口（默认 5 秒）自行释放；窗口结束仍不足时，每次终止一个 acgroup，等它回收完成、内存释放后再重新评估，直到可用内存回到预留线以上。终止码为 503 SAFETY\_NET。实现：每终止一个之后，滞回计数清零，下一个至少要再等连续 3 次新的低于预留线的读数。两类 `CAPACITY_SHRUNK` 用 `reason` 区分：`allocated_exceeds_capacity`（只拒绝）与 `below_reserve`（随后兜底终止）。
+  - **容量护栏**（实现）：采样式的兜底终止至少要 3 秒才会动手，挡不住更快的暴涨。实验中（L 组第 5 次）外部干扰占着 3.6GiB 时，几个早已获准的 worker 同时开出数百个进程，两秒内从 0.3GiB 涨到 8.3GiB，整个爆炸舱撞上自己的上限，内核清空了整个舱。因此 cgroup2 backend 给所有 lease 共同的父 cgroup 设 `memory.max`，每秒更新为 MemTotal − 外部占用 − 预留线的一半：比兜底终止的触发线低半条预留线，所以有时间时仍由兜底终止先预警、再挑选；只有快过采样的暴涨才由内核在 lease 之间挑一个整组终止，而不是让宿主 OOM。父 cgroup 不设 `memory.oom.group`，每次只终止一个 lease。这样终止的 lease 记 503，evidence 中 `detected_by` 为 `kernel`。集成测试中，同样的暴涨在 63–98 毫秒内被终止，宿主的上限没有被触及；关掉护栏时宿主上限被撞。
 - **终止顺序**：planner 事先提交过 `kill_order` 提示时按它执行；否则默认先终止叶子节点，同为叶子时按当前用量从大到小，用最少的终止次数释放内存。实现：先选当前用量最大的 lead 树；树内若有 lease 带 `kill_order`，取数值最小者；否则取用量最大的叶子；同用量按 id 排序以保证可复现。
 - 5 秒窗口对 LLM planner 基本来不及响应，实际只对代码实现的 planner 和事先声明的 `kill_order` 有意义。兜底终止是一条确定的规则，不涉及判断。正常运行时它不会触发；一旦触发，就说明预留线或外部负载需要重新评估。
 

@@ -500,11 +500,11 @@ func (b *Backend) Sample(_ context.Context, g backend.ACGroup) (api.Usage, error
 	}, nil
 }
 
-// ownOOMs counts the times this acgroup was killed as a group because its
-// own limit was hit. The kernel records a group kill on the cgroup whose
-// limit caused it, so a nested acgroup that died with its parent reports
-// zero. Kernels before 5.19 lack that counter; there "oom", the number of
-// times the cgroup's own limit was reached, is the closest fact available.
+// ownOOMs counts the times this cgroup's own memory limit was reached and
+// the kernel had to kill for it: "oom" in memory.events.local, which counts
+// at the cgroup whose limit was hit. "oom_group_kill" is no measure of
+// that: it counts at the group that was killed, which is a lease even when
+// the limit hit was its parent's or the capacity guard's.
 func ownOOMs(dir string) int64 {
 	data, err := os.ReadFile(filepath.Join(dir, "memory.events.local"))
 	if err != nil {
@@ -515,9 +515,6 @@ func ownOOMs(dir string) int64 {
 		if k, v, ok := strings.Cut(line, " "); ok {
 			vals[k], _ = strconv.ParseInt(v, 10, 64)
 		}
-	}
-	if n, ok := vals["oom_group_kill"]; ok {
-		return n
 	}
 	return vals["oom"]
 }
@@ -831,3 +828,17 @@ func (b *Backend) TopProcs(_ context.Context, g backend.ACGroup, n int) ([]api.P
 	sort.Slice(out, func(i, j int) bool { return out[i].Memory > out[j].Memory })
 	return out[:min(n, len(out))], nil
 }
+
+// SetGuard sets memory.max of the base cgroup, which holds every lease.
+// Its memory.oom.group stays 0: the kernel then ends one lease, whose own
+// group setting takes its whole tree, not every lease at once.
+func (b *Backend) SetGuard(_ context.Context, limit int64) error {
+	v := "max"
+	if limit > 0 {
+		v = strconv.FormatInt(limit, 10)
+	}
+	return write(filepath.Join(b.cfg.Base, "memory.max"), v)
+}
+
+// GuardHits is how often the base cgroup's limit was reached.
+func (b *Backend) GuardHits() int64 { return ownOOMs(b.cfg.Base) }

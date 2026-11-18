@@ -132,6 +132,9 @@ type Manager struct {
 	admit sync.Mutex // serialises ledger-plus-backend changes to reservations
 	mu    sync.Mutex
 	rt    map[api.LeaseID]*runtime
+	// guard is the capacity guard, when the backend has one: the limit last
+	// set and the hits already put down to a lease.
+	guardLimit, guardHits int64
 }
 
 // NewManager starts fail-closed: every acgroup the backend still reports is
@@ -177,6 +180,10 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 	m := &Manager{
 		cfg: cfg, be: cfg.Backend, log: cfg.Log,
 		led: ledger.New(cfg.Capacity), rt: map[api.LeaseID]*runtime{},
+	}
+	// Hits of the capacity guard from before this daemon are not its own.
+	if g, ok := cfg.Backend.(backend.CapacityGuard); ok {
+		m.guardHits = g.GuardHits()
 	}
 	m.obs, m.ctl = newObserver(cfg), newControl()
 	if cfg.Host != nil {
@@ -539,9 +546,32 @@ func (m *Manager) onMainExit(id api.LeaseID, wait func() backend.ExitStatus) {
 	if st.Signal != 0 {
 		if hit, n := m.oomLimitHit(id); hit != "" {
 			m.reap(hit, api.CodeOOMLeaseLimit, map[string]any{"oom_events": n})
+		} else if limit, ok := m.guardHit(); ok {
+			// No lease's own limit: the capacity guard over all of them.
+			// The machine ran short faster than the safety net samples,
+			// and the kernel did what the net would have done.
+			code = api.CodeSafetyNet
+			ev["detected_by"], ev["capacity_guard"] = "kernel", limit
 		}
 	}
 	m.reap(id, code, ev)
+}
+
+// guardHit reports whether the capacity guard was reached since it was
+// last asked, and the guard's limit.
+func (m *Manager) guardHit() (int64, bool) {
+	g, ok := m.be.(backend.CapacityGuard)
+	if !ok {
+		return 0, false
+	}
+	n := g.GuardHits()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if n <= m.guardHits {
+		return 0, false
+	}
+	m.guardHits = n
+	return m.guardLimit, true
 }
 
 // oomLimitHit looks from the lease upwards for the nearest acgroup whose

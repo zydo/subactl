@@ -1333,3 +1333,53 @@ func TestIntegrationTopProcsAfterOOM(t *testing.T) {
 		t.Fatalf("ended with %d, top processes %+v", term.Code, top)
 	}
 }
+
+// The capacity guard: memory grows faster than the safety net samples,
+// while something outside every lease holds most of the machine. The
+// kernel ends the lease at the guard, which is 503, and the machine's own
+// limit is never reached.
+func TestIntegrationCapacityGuard(t *testing.T) {
+	e := newEnvIn(t, 640*mib, 160*mib)
+	// Admitted while the machine has room, as the workers of a planner are;
+	// it waits for the signal to grow.
+	id := e.run(e.op, 400*mib, `while [ ! -f "$SUBACTL_SCRATCH/go" ]; do sleep 0.1; done; `+hog)
+	// Then 300MiB is taken outside every lease (awk, so that no Node is
+	// needed), and the guard follows it down.
+	external := exec.Command("/bin/sh", "-c", `exec awk 'BEGIN { s = sprintf("%314572800s", ""); system("sleep 600") }'`)
+	leaf, err := os.Open(filepath.Join(e.outer, "external"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer leaf.Close()
+	external.SysProcAttr = &syscall.SysProcAttr{UseCgroupFD: true, CgroupFD: int(leaf.Fd())}
+	if err := external.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer external.Process.Kill()
+	time.Sleep(4 * time.Second)
+	limit, _ := os.ReadFile(filepath.Join(e.base, "memory.max"))
+	t.Logf("capacity guard at %s", strings.TrimSpace(string(limit)))
+	// Within its own limit, but more than the machine has left, at once:
+	// faster than the safety net, which needs three readings.
+	if err := os.WriteFile(filepath.Join(e.be.ScratchDir(id), "go"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	term := e.wait(id, 15*time.Second)
+	if term.Code != api.CodeSafetyNet || term.Evidence["detected_by"] != "kernel" {
+		t.Fatalf("ended with %d %s: %+v", term.Code, term.Name, term.Evidence)
+	}
+	if n := ownOOMsOf(e.outer); n != 0 {
+		t.Fatalf("the machine's own limit was reached %d times", n)
+	}
+}
+
+func ownOOMsOf(dir string) int64 {
+	data, _ := os.ReadFile(filepath.Join(dir, "memory.events.local"))
+	for _, line := range strings.Split(string(data), "\n") {
+		if v, ok := strings.CutPrefix(line, "oom "); ok {
+			n, _ := strconv.ParseInt(v, 10, 64)
+			return n
+		}
+	}
+	return 0
+}

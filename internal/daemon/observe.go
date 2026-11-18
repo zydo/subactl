@@ -18,13 +18,15 @@ import (
 )
 
 const (
-	ringSeconds   = 600  // in-memory samples per lease: ten minutes at one a second
-	sampleEvery   = 5    // every fifth sample also goes to the audit log
-	maxEvents     = 500  // events kept per lease for its trace
-	keptTraces    = 1024 // traces of reaped leases kept in memory
-	rearmFraction = 0.85 // NEAR_LIMIT re-arms once usage falls below this share
-	topProcs      = 3    // processes listed in a termination's evidence
-	topProcsFrom  = 0.75 // share of the limit from which they are listed at every sample
+	ringSeconds   = 600      // in-memory samples per lease: ten minutes at one a second
+	sampleEvery   = 5        // every fifth sample also goes to the audit log
+	maxEvents     = 500      // events kept per lease for its trace
+	keptTraces    = 1024     // traces of reaped leases kept in memory
+	rearmFraction = 0.85     // NEAR_LIMIT re-arms once usage falls below this share
+	topProcs      = 3        // processes listed in a termination's evidence
+	topProcsFrom  = 0.75     // share of the limit from which they are listed at every sample
+	guardStep     = 16 << 20 // the capacity guard is rewritten when it moves by more
+	minGuard      = 64 << 20 // and never set below this
 )
 
 // leaseObs is what is observed about one lease. It is kept apart from the
@@ -354,6 +356,7 @@ func (m *Manager) trackCapacity(usage map[api.LeaseID]int64) {
 	was := o.shrunk
 	o.host, o.external, o.shrunk = h, external, shrunk
 	o.mu.Unlock()
+	m.setGuard(h, external)
 	if shrunk && !was {
 		// Allocated is not used: nothing is terminated for this. New
 		// leases and raises are refused until it recovers.
@@ -363,6 +366,32 @@ func (m *Manager) trackCapacity(usage map[api.LeaseID]int64) {
 		})
 	}
 	m.safetyNet(h, usage)
+}
+
+// setGuard keeps the capacity guard, one kernel limit over all leases, at
+// what the host can give them while keeping half the reserve line: below
+// the line at which the safety net acts, so that the net, with its
+// warning and its choice of lease, comes first whenever there is time.
+// The guard is for bursts faster than the net's sampling.
+func (m *Manager) setGuard(h capacity.Host, external int64) {
+	g, ok := m.be.(backend.CapacityGuard)
+	if !ok {
+		return
+	}
+	limit := max(h.Total-external-m.cfg.Reserve/2, minGuard)
+	m.mu.Lock()
+	last := m.guardLimit
+	m.mu.Unlock()
+	if d := limit - last; d > -guardStep && d < guardStep && last != 0 {
+		return // not worth a write
+	}
+	if err := g.SetGuard(context.Background(), limit); err != nil {
+		m.log.Warn("cannot set the capacity guard", "err", err)
+		return
+	}
+	m.mu.Lock()
+	m.guardLimit = limit
+	m.mu.Unlock()
 }
 
 // safetyNet is the only action subactld takes on its own. Available

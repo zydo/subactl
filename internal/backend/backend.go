@@ -67,6 +67,18 @@ type TTYProc interface {
 	TTY() *os.File
 }
 
+// CapacityGuard is implemented by backends that can put one kernel limit
+// over all leases together. The daemon keeps it just under what the host
+// can give them, so that a burst faster than the safety net's sampling
+// ends a lease instead of running the host out of memory.
+type CapacityGuard interface {
+	// SetGuard sets the limit; zero or less removes it.
+	SetGuard(ctx context.Context, limit int64) error
+	// GuardHits counts the times the guard was reached and the kernel had
+	// to end a lease for it.
+	GuardHits() int64
+}
+
 // ProcLister is implemented by backends that can list the processes of an
 // acgroup and of those nested in it, largest memory first, at most n.
 type ProcLister interface {
