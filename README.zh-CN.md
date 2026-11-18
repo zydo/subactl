@@ -5,6 +5,7 @@
 <p align="center">
   <a href="https://github.com/zydo/subactl/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/zydo/subactl/ci.yml?branch=main&amp;label=CI&amp;logo=githubactions&amp;logoColor=white&amp;style=for-the-badge&amp;labelColor=1f2328"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/zydo/subactl?color=6e7781&amp;style=for-the-badge&amp;labelColor=1f2328"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/zydo/subactl"><img alt="OpenSSF Scorecard" src="https://img.shields.io/ossf-scorecard/github.com/zydo/subactl?label=openssf%20scorecard&amp;logo=openssf&amp;logoColor=white&amp;style=for-the-badge&amp;labelColor=1f2328"></a>
 </p>
 
 <p align="center"><a href="README.md">English</a> | 中文</p>
