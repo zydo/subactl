@@ -94,8 +94,15 @@ func run(args []string) error {
 	if err != nil || u.Uid == "0" {
 		return fmt.Errorf("--user %q: name a non-root user for the lead to run as", *userName)
 	}
-	uid, _ := strconv.Atoi(u.Uid)
-	gid, _ := strconv.Atoi(u.Gid)
+	// uids and gids are 32-bit unsigned; parse them as such.
+	uid, err := strconv.ParseUint(u.Uid, 10, 32)
+	if err != nil {
+		return fmt.Errorf("--user %q: uid %q: %w", *userName, u.Uid, err)
+	}
+	gid, err := strconv.ParseUint(u.Gid, 10, 32)
+	if err != nil {
+		return fmt.Errorf("--user %q: gid %q: %w", *userName, u.Gid, err)
+	}
 	self, err := os.Executable()
 	if err != nil {
 		return err
@@ -131,7 +138,7 @@ func run(args []string) error {
 			StateDir:  stateDir(abs(*out), *group, i),
 			MiniAgent: abs(*miniAgent), Self: self, OutDir: outDir, WorkDir: abs(*workDir),
 			Brain: *brain, Provider: *provider,
-			Base: *base, ChamberBytes: bytes, UID: uid, GID: gid, Home: u.HomeDir, Settle: *settle,
+			Base: *base, ChamberBytes: bytes, UID: int(uid), GID: int(gid), Home: u.HomeDir, Settle: *settle,
 			Log: func(f string, a ...any) { fmt.Fprintf(os.Stderr, time.Now().Format("15:04:05 ")+f+"\n", a...) },
 		})
 		if err != nil {

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"os/exec"
 	"os/user"
@@ -466,6 +467,13 @@ func readInt(path string) int64 {
 	return n
 }
 
+// count reads a process count such as pids.current. The kernel caps
+// those at pid_max (at most 2^22), so the bound below never applies; it
+// makes the conversion safe on a 32-bit int too.
+func count(path string) int {
+	return int(min(max(readInt(path), 0), math.MaxInt32))
+}
+
 // stat reads one key of a flat-keyed file such as memory.stat.
 func stat(path, key string) int64 {
 	f, err := os.Open(path)
@@ -574,14 +582,14 @@ func (b *Backend) KillTree(ctx context.Context, g backend.ACGroup) (backend.Kill
 	if err != nil {
 		return backend.KillReport{}, err
 	}
-	rep := backend.KillReport{Killed: int(readInt(filepath.Join(dir, "pids.current")))}
+	rep := backend.KillReport{Killed: count(filepath.Join(dir, "pids.current"))}
 	if err := write(filepath.Join(dir, "cgroup.kill"), "1"); err != nil {
 		return rep, fmt.Errorf("cgroup2: kill %s: %w", g.Ref().Lease, err)
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	for populated(dir) {
 		if time.Now().After(deadline) || ctx.Err() != nil {
-			rep.Remaining = int(readInt(filepath.Join(dir, "pids.current")))
+			rep.Remaining = count(filepath.Join(dir, "pids.current"))
 			rep.Killed -= rep.Remaining
 			return rep, nil
 		}
