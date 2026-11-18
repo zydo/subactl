@@ -1,8 +1,8 @@
+<h1 align="center">subactl</h1>
+
+<p align="center"><b>Suba</b>gent <b>C</b>on<b>t</b>ro<b>l</b>ler: a single-host resource controller for AI agents that start other agents</p>
+
 English | [简体中文](README.zh-CN.md)
-
-# subactl
-
-**Suba**gent **C**on**t**ro**l**ler: a single-host resource controller for AI agents that start other agents.
 
 A coding agent working on a large task fans out subagents, and each
 subagent starts its own processes: type checkers, test runners, dev

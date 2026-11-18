@@ -126,7 +126,7 @@ func TestDocLinks(t *testing.T) {
 }
 
 // TestDocTranslations checks that the README and every document in docs/
-// exist in English and in Chinese, each pointing to the other at the top.
+// exist in English and in Chinese, each pointing to the other near the top.
 func TestDocTranslations(t *testing.T) {
 	root := filepath.Join("..", "..")
 	pairs := 0
@@ -151,8 +151,15 @@ func TestDocTranslations(t *testing.T) {
 				t.Errorf("%s has no counterpart %s%s", rel, dir, file)
 				continue
 			}
-			if line, _, _ := strings.Cut(string(data), "\n"); line != first {
-				t.Errorf("%s%s: first line %q, want %q", dir, file, line, first)
+			// At the top: the first line, or after a title block (the README
+			// has a centered title and subtitle above it).
+			lines := strings.SplitN(string(data), "\n", 11)
+			found := false
+			for _, line := range lines[:min(len(lines), 10)] {
+				found = found || line == first
+			}
+			if !found {
+				t.Errorf("%s%s: no line %q in its first 10 lines", dir, file, first)
 			}
 		}
 		pairs++
