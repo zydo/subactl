@@ -118,7 +118,7 @@ def svg(s):
          '<marker id="tip" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1,1 L9,5 L1,9" fill="none" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker>'
          '</defs>',
          '<rect x="0.5" y="0.5" width="959" height="559" rx="22" fill="url(#bg)" stroke="#e2e8f0"/>',
-         f'<text x="40" y="58" font-size="26" font-weight="800" fill="{INK}" letter-spacing="-0.3">{s["title"]}</text>',
+         f'<text x="480" y="58" font-size="26" font-weight="800" fill="{INK}" letter-spacing="-0.3" text-anchor="middle">{s["title"]}</text>',
          # the machine
          '<rect x="40" y="84" width="572" height="440" rx="18" fill="#ffffff" stroke="#e2e8f0" filter="url(#soft)"/>',
          f'<text x="62" y="114" font-size="12" font-weight="700" fill="{FAINT}" letter-spacing="1.6">{s["machine"]}</text>',
