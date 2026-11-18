@@ -1,6 +1,7 @@
 ---
 name: subactl
-description: Start, size, watch and end child agents with subactl, the resource controller for agents on one machine. Use it whenever you are about to delegate work to another agent or worker process, fan work out to several of them in parallel, choose how much memory a child gets, react to how a child ended (codes such as 413, 503, 520), or handle a "[subactl control message ...]" such as TERMINATE_REQUESTED. Also use it when SUBACTL_LEASE_ID is set in your environment, which means you are running under subactl.
+description: Start, size, watch and end child agents with subactl, the resource controller for agents on one machine (Linux and macOS only, with subactl installed). Use it whenever you are about to delegate work to another agent or worker process, fan work out to several of them in parallel, choose how much memory a child gets, react to how a child ended (codes such as 413, 503, 520), or handle a "[subactl control message ...]" such as TERMINATE_REQUESTED. Also use it when SUBACTL_LEASE_ID is set in your environment, which means you are running under subactl.
+compatibility: Linux and macOS only. Needs the subactl CLI on PATH and a running subactld; does not work on Windows or other systems.
 ---
 
 # subactl
@@ -10,6 +11,17 @@ resource group with a hard memory limit, carved out of yours. When a child
 ends, every process it started is gone, however it was started. You can act
 only on your own subtree. You are running under subactl when
 `SUBACTL_LEASE_ID` is set; your own files belong in `$SUBACTL_SCRATCH`.
+
+**First, check that subactl is here.** It runs only on Linux and macOS,
+and only where it has been installed:
+
+```bash
+uname -s; command -v subactl && subactl host >/dev/null && echo ready
+```
+
+If the system is not Linux or Darwin, `subactl` is not on the `PATH`, or
+`subactl host` fails (no daemon), this skill does not apply: do the work
+without it, and do not try to install subactl unless the user asks.
 
 ## Start one child
 
