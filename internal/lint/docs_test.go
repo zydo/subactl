@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	mdLink  = regexp.MustCompile(`\]\(([^)\s]+)\)`)
+	mdLink  = regexp.MustCompile(`\]\(([^)\s]+)\)|(?:src|href)="([^"]+)"`)
 	fence   = regexp.MustCompile("(?ms)^\\s*```.*?^\\s*```")
 	inlineC = regexp.MustCompile("`[^`\n]*`")
 	heading = regexp.MustCompile(`(?m)^#{1,6}\s+(.+?)\s*#*\s*$`)
@@ -82,7 +82,8 @@ func anchors(text string) map[string]bool {
 }
 
 // TestDocLinks checks that every relative link in the repository's
-// Markdown points to a file that exists, and every #anchor to a heading.
+// Markdown, in Markdown or in HTML (src, href), points to a file that
+// exists, and every #anchor to a heading.
 // Links to the web are not checked here.
 func TestDocLinks(t *testing.T) {
 	root := filepath.Join("..", "..")
@@ -105,7 +106,7 @@ func TestDocLinks(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, m := range mdLink.FindAllStringSubmatch(prose(string(data)), -1) {
-			link := m[1]
+			link := m[1] + m[2]
 			if strings.Contains(link, "://") || strings.HasPrefix(link, "mailto:") {
 				continue
 			}

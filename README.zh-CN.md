@@ -9,6 +9,8 @@
 
 [English](README.md) | 简体中文
 
+<p align="center"><img src="docs/assets/how-subactl-works.zh-CN.svg" alt="subactl 如何工作：lead agent 的 lease 里装着各个 worker 的 lease；超限的 worker 连同它启动的一切被终止" width="880"></p>
+
 coding agent 处理大任务时会扇出多个 subagent，每个 subagent 又会启动自己的进程：类型检查、测试、dev server、无头浏览器。在一台机器上，这会以几种熟悉的方式出问题：内存耗尽，内核随机杀掉某个进程，被杀的往往正是在干活的那个 agent；subagent 被 planner 叫停、撞上用量额度或崩溃时，它启动的进程继续运行，占着没人记账的内存；而 planner 在派下一个 worker 之前，也没有任何东西告诉它还剩多少余量。
 
 subactl 把每个 agent 放进一个 **lease**：一组进程，带一个从父节点的配额里划出来的内存上限（envelope）。它守住三条承诺：
@@ -27,7 +29,13 @@ subactl 把每个 agent 放进一个 **lease**：一组进程，带一个从父�
 npx skills add zydo/subactl --skill subactl
 ```
 
-也可以用 GitHub 的 CLI：`gh skill install zydo/subactl`。skill 只教命令怎么用：agent 所在的机器还需要把 `subactl` 放进 `PATH`，并运行 `subactld`（见[试用](#试用)和[作为服务安装](#作为服务安装linux)）。
+或者用 GitHub 的 CLI：
+
+```sh
+gh skill install zydo/subactl
+```
+
+skill 只教命令怎么用：agent 所在的机器还需要把 `subactl` 放进 `PATH`，并运行 `subactld`（见[试用](#试用)和[作为服务安装](#作为服务安装linux)）。
 
 ## 平台
 

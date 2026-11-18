@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>subactl 如何工作</title>
+  <desc>lead agent 的 lease 里装着各个 worker 的 lease，每个都有内存硬限。超限的 worker 连同它启动的每个进程一起被终止；subactld 只批准放得下的申请，整组终止，并报告每个 lease 的结束原因。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606a"/>
+    </marker>
+  </defs>
+
+  <!-- card -->
+  <rect x="0.5" y="0.5" width="959" height="519" rx="16" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="32" y="44" font-size="20" font-weight="700" fill="#1f2328">subactl 如何工作</text>
+
+  <!-- the machine -->
+  <rect x="32" y="66" width="568" height="424" rx="12" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="48" y="90" font-size="13" fill="#57606a">一台机器</text>
+
+  <!-- the lead's lease -->
+  <rect x="52" y="104" width="528" height="300" rx="10" fill="#ddf4ff" stroke="#54aeff" stroke-width="1.5"/>
+  <text x="68" y="129" font-size="15" font-weight="700" fill="#0a3069">lead · 配额 9 GiB</text>
+  <text x="68" y="149" font-size="12" fill="#0a3069">你的 planner agent，用 subactl run 启动</text>
+
+  <!-- worker 1: done -->
+  <rect x="68" y="164" width="156" height="224" rx="8" fill="#ffffff" stroke="#54aeff"/>
+  <text x="82" y="187" font-size="13" font-weight="700" fill="#1f2328">worker · 3 GiB</text>
+  <rect x="82" y="200" width="128" height="24" rx="5" fill="#eaeef2"/>
+  <text x="92" y="216" font-size="12" fill="#1f2328">node</text>
+  <rect x="82" y="230" width="128" height="24" rx="5" fill="#eaeef2"/>
+  <text x="92" y="246" font-size="12" fill="#1f2328">tsc</text>
+  <rect x="82" y="260" width="128" height="24" rx="5" fill="#eaeef2"/>
+  <text x="92" y="276" font-size="12" fill="#1f2328">dev server</text>
+  <rect x="82" y="340" width="128" height="34" rx="6" fill="#dafbe1" stroke="#4ac26b"/>
+  <text x="146" y="362" font-size="12" font-weight="600" fill="#116329" text-anchor="middle">200 · 完成</text>
+
+  <!-- worker 2: over its limit -->
+  <rect x="240" y="164" width="156" height="224" rx="8" fill="#ffebe9" stroke="#cf222e" stroke-width="1.5"/>
+  <text x="254" y="187" font-size="13" font-weight="700" fill="#1f2328">worker · 3 GiB</text>
+  <rect x="254" y="200" width="128" height="24" rx="5" fill="#ffffff" stroke="#ff8182" stroke-dasharray="4 3"/>
+  <text x="264" y="216" font-size="12" fill="#82071e">node</text>
+  <rect x="254" y="230" width="128" height="24" rx="5" fill="#ffffff" stroke="#ff8182" stroke-dasharray="4 3"/>
+  <text x="264" y="246" font-size="12" fill="#82071e">chrome × 11</text>
+  <rect x="254" y="260" width="128" height="24" rx="5" fill="#ffffff" stroke="#ff8182" stroke-dasharray="4 3"/>
+  <text x="264" y="276" font-size="12" fill="#82071e">nohup'd server</text>
+  <rect x="254" y="326" width="128" height="48" rx="6" fill="#ffffff" stroke="#cf222e"/>
+  <text x="318" y="345" font-size="12" font-weight="600" fill="#82071e" text-anchor="middle">413 · 超出上限</text>
+  <text x="318" y="364" font-size="11" fill="#82071e" text-anchor="middle">整组终止，不波及他人</text>
+
+  <!-- worker 3: with a fixer of its own -->
+  <rect x="412" y="164" width="156" height="224" rx="8" fill="#ffffff" stroke="#54aeff"/>
+  <text x="426" y="187" font-size="13" font-weight="700" fill="#1f2328">worker · 2.5 GiB</text>
+  <rect x="426" y="200" width="128" height="24" rx="5" fill="#eaeef2"/>
+  <text x="436" y="216" font-size="12" fill="#1f2328">node</text>
+  <rect x="426" y="232" width="128" height="88" rx="6" fill="#ddf4ff" stroke="#54aeff" stroke-dasharray="5 3"/>
+  <text x="438" y="252" font-size="12" font-weight="700" fill="#0a3069">fixer · 1 GiB</text>
+  <rect x="438" y="262" width="104" height="22" rx="5" fill="#ffffff"/>
+  <text x="446" y="277" font-size="12" fill="#1f2328">jest</text>
+  <text x="438" y="308" font-size="11" fill="#0a3069">嵌套在父节点内</text>
+  <rect x="426" y="340" width="128" height="34" rx="6" fill="#ddf4ff" stroke="#54aeff"/>
+  <text x="490" y="362" font-size="12" font-weight="600" fill="#0a3069" text-anchor="middle">运行中</text>
+
+  <!-- outside the agents -->
+  <rect x="52" y="420" width="250" height="54" rx="8" fill="#ffffff" stroke="#8c959f" stroke-dasharray="5 4"/>
+  <text x="68" y="443" font-size="12" font-weight="600" fill="#57606a">其他程序</text>
+  <text x="68" y="461" font-size="11" fill="#57606a">不是 agent：只计量，不管理</text>
+  <rect x="318" y="420" width="262" height="54" rx="8" fill="#eaeef2" stroke="#d0d7de"/>
+  <text x="334" y="443" font-size="12" font-weight="600" fill="#57606a">预留线</text>
+  <text x="334" y="461" font-size="11" fill="#57606a">保持空闲；跌破时兜底终止出手</text>
+
+  <!-- requests and events -->
+  <line x1="584" y1="196" x2="628" y2="196" stroke="#57606a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="606" y="186" font-size="11" fill="#57606a" text-anchor="middle">spawn</text>
+  <line x1="628" y1="250" x2="584" y2="250" stroke="#57606a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="606" y="240" font-size="11" fill="#57606a" text-anchor="middle">事件</text>
+
+  <!-- the daemon -->
+  <rect x="632" y="66" width="296" height="234" rx="12" fill="#24292f"/>
+  <text x="652" y="98" font-size="17" font-weight="700" fill="#ffffff">subactld</text>
+  <text x="652" y="118" font-size="12" fill="#afb8c1">daemon：校验、执行、报告</text>
+  <text font-size="13" fill="#ffffff">
+    <tspan x="652" y="150">• 配额放得下才批准：</tspan>
+    <tspan x="664" y="168" fill="#afb8c1">内存绝不超卖</tspan>
+    <tspan x="652" y="198">• 终止 lease 时，连同它启动的</tspan>
+    <tspan x="664" y="216" fill="#afb8c1">每个进程和下层 lease 一起终止</tspan>
+    <tspan x="652" y="246">• 机器内存不足时先警告，</tspan>
+    <tspan x="664" y="264" fill="#afb8c1">再一次终止一个 lease</tspan>
+  </text>
+
+  <!-- what the planner gets back -->
+  <rect x="632" y="316" width="296" height="174" rx="12" fill="#fff8c5" stroke="#d4a72c"/>
+  <text x="652" y="344" font-size="14" font-weight="700" fill="#4d2d00">每个 lease 给 planner 一个终止码</text>
+  <text font-size="12.5" fill="#4d2d00">
+    <tspan x="652" y="372"><tspan font-weight="700">200</tspan>  完成，附结果路径</tspan>
+    <tspan x="652" y="394"><tspan font-weight="700">413</tspan>  超出自身上限：加大配额重试</tspan>
+    <tspan x="652" y="416"><tspan font-weight="700">503</tspan>  机器内存不足：稍后重试</tspan>
+    <tspan x="652" y="438"><tspan font-weight="700">502</tspan>  父节点已结束</tspan>
+    <tspan x="652" y="464" font-size="11.5" fill="#7d4e00">预警：NEAR_LIMIT、CAPACITY_SHRUNK</tspan>
+  </text>
+</svg>

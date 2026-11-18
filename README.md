@@ -9,6 +9,8 @@
 
 English | [简体中文](README.zh-CN.md)
 
+<p align="center"><img src="docs/assets/how-subactl-works.svg" alt="How subactl works: a lead agent's lease holds its workers' leases; a worker over its limit is ended with everything it started" width="880"></p>
+
 A coding agent working on a large task fans out subagents, and each
 subagent starts its own processes: type checkers, test runners, dev
 servers, headless browsers. On one machine this goes wrong in familiar
@@ -47,8 +49,13 @@ with the [skills](https://github.com/vercel-labs/skills) CLI:
 npx skills add zydo/subactl --skill subactl
 ```
 
-or with GitHub's CLI: `gh skill install zydo/subactl`. The skill only
-teaches the commands: the machine the agent runs on also needs `subactl`
+or with GitHub's CLI:
+
+```sh
+gh skill install zydo/subactl
+```
+
+The skill only teaches the commands: the machine the agent runs on also needs `subactl`
 on its `PATH` and a running `subactld` (see [Try it](#try-it) and
 [Install as a service](#install-as-a-service-linux)).
 
