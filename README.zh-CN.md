@@ -2,7 +2,7 @@
 
 # subactl
 
-单机上的 AI agent 资源控制器，面向会派生其他 agent 的 agent。
+**Suba**gent **C**on**t**ro**l**ler：单机上的 AI agent 资源控制器，面向会派生其他 agent 的 agent。
 
 coding agent 处理大任务时会扇出多个 subagent，每个 subagent 又会启动自己的进程：类型检查、测试、dev server、无头浏览器。在一台机器上，这会以几种熟悉的方式出问题：内存耗尽，内核随机杀掉某个进程，被杀的往往正是在干活的那个 agent；subagent 被 planner 叫停、撞上用量额度或崩溃时，它启动的进程继续运行，占着没人记账的内存；而 planner 在派下一个 worker 之前，也没有任何东西告诉它还剩多少余量。
 

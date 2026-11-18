@@ -2,7 +2,7 @@ English | [简体中文](README.zh-CN.md)
 
 # subactl
 
-A single-host resource controller for AI agents that start other agents.
+**Suba**gent **C**on**t**ro**l**ler: a single-host resource controller for AI agents that start other agents.
 
 A coding agent working on a large task fans out subagents, and each
 subagent starts its own processes: type checkers, test runners, dev
