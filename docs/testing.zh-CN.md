@@ -12,6 +12,7 @@ subactl 支持 Linux 和 macOS；在其他任何系统上，它的包都会构�
 | 单元测试 | `make test` | Go | 依赖规则（标准库、`golang.org/x/sys` 和 `golang.org/x/term` 之外一律不许引入）；Markdown 中每个相对链接和标题锚点都有效，每篇文档都有英文和中文两版且互相链接；在 fake backend 上的账本、准入、lease 生命周期与终止码；API 与 `api/openapi.yaml` 的一致性；client 与 CLI；审计日志、建议配额与指标；mini-agent 的循环、工具和 LLM client（用录制的流）；在 macOS 上还有 `darwin` backend，使用真实进程 |
 | 集成测试 | `make integration` | Linux、root、cgroup v2；部分测试需要 Node | 真实内核上的 cgroup v2 backend，测试以它们检查的验收标准命名：嵌套、整组回收、防逃逸、fail-closed 重启、内存隔离、兜底终止与容量护栏、运行时长与输出上限、终止码、按 cgroup 归属认定身份、多 lead 隔离与 CPU 公平性 |
 | 漏洞 | `govulncheck ./...`（CI：每次推送和每周） | Go | subactl 实际调用到的代码中已知的漏洞，包括依赖和标准库；Dependabot 让依赖和 actions 保持最新 |
+| 代码扫描 | CodeQL 与 OpenSSF Scorecard（CI：每次推送和每周） | | CodeQL 查找 Go 代码中的安全缺陷；Scorecard 评估仓库的供应链安全做法。结果见 Security > Code scanning |
 | 基准测试 | `bench/chamber/run.sh` | Docker，首次运行需要网络 | 爆炸舱里的 radix 任务；见 [benchmark.zh-CN.md](benchmark.zh-CN.md) |
 
 在 Linux 上，`make integration` 用 `sudo` 运行测试二进制；在其他系统上，在特权 Docker 容器里运行。机器缺少某个工具（Node、zsh、fish）的测试会被跳过，除非 `SUBACTL_REQUIRE_SHELLS` 列出了必须存在的 shell。

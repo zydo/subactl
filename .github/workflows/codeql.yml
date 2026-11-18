@@ -1,0 +1,33 @@
+name: codeql
+# GitHub's code scanning for the Go code: security bugs a type checker and
+# govulncheck do not see (unsafe file paths, command injection, leaks).
+# Findings appear under Security > Code scanning.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 6 * * 1"   # Mondays
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  analyze:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: go
+          build-mode: manual
+      # Both modules, built for Linux, where the enforcing backend lives.
+      - run: go build ./... && (cd examples/mini-agent && go build ./...)
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:go
