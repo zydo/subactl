@@ -9,7 +9,7 @@ import os
 T = {
     "en": dict(
         file="how-subactl-works.svg",
-        title="How subactl works",
+        title="How Subagent Controller Works",
         desc="A lead's lease holds its workers' leases, each with a hard memory limit. "
              "A worker over its limit is ended with everything it started; subactld "
              "never oversells memory, ends whole groups and keeps the machine up.",
@@ -25,7 +25,7 @@ T = {
     ),
     "zh": dict(
         file="how-subactl-works.zh-CN.svg",
-        title="subactl 如何工作",
+        title="Subagent Controller 如何工作",
         desc="lead 的 lease 里装着各个 worker 的 lease，每个都有内存硬限。超限的 worker "
              "连同它启动的一切被终止；subactld 从不超卖内存，整组终止，保住整台机器。",
         machine="一台机器",

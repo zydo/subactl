@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Helvetica, Arial, sans-serif">
-<title>subactl 如何工作</title><desc>lead 的 lease 里装着各个 worker 的 lease，每个都有内存硬限。超限的 worker 连同它启动的一切被终止；subactld 从不超卖内存，整组终止，保住整台机器。</desc>
+<title>Subagent Controller 如何工作</title><desc>lead 的 lease 里装着各个 worker 的 lease，每个都有内存硬限。超限的 worker 连同它启动的一切被终止；subactld 从不超卖内存，整组终止，保住整台机器。</desc>
 <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fafbff"/><stop offset="1" stop-color="#f1f4fb"/></linearGradient><linearGradient id="brand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#a855f7"/></linearGradient><pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="#f8fafc"/><line x1="0" y1="0" x2="0" y2="8" stroke="#e2e8f0" stroke-width="3"/></pattern><filter id="soft" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#1e293b" flood-opacity="0.07"/></filter><marker id="tip" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1,1 L9,5 L1,9" fill="none" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
 <rect x="0.5" y="0.5" width="959" height="559" rx="22" fill="url(#bg)" stroke="#e2e8f0"/>
-<text x="480" y="58" font-size="26" font-weight="800" fill="#0f172a" letter-spacing="-0.3" text-anchor="middle">subactl 如何工作</text>
+<text x="480" y="58" font-size="26" font-weight="800" fill="#0f172a" letter-spacing="-0.3" text-anchor="middle">Subagent Controller 如何工作</text>
 <rect x="40" y="84" width="572" height="440" rx="18" fill="#ffffff" stroke="#e2e8f0" filter="url(#soft)"/>
 <text x="62" y="114" font-size="12" font-weight="700" fill="#94a3b8" letter-spacing="1.6">一台机器</text>
 <rect x="58" y="128" width="536" height="296" rx="16" fill="#f5f7ff" stroke="#c7d2fe"/>
