@@ -1,66 +1,91 @@
 # subactl
 
-A single-host resource controller for subagents: a quota ledger that never
-oversells memory, and a guarantee that when an agent's group ends, every
-process in it is gone. `subactld` is the daemon, `subactl` the CLI.
+A single-host resource controller for AI agents that start other agents.
 
-The design is in [DESIGN.md](DESIGN.md). The only contract is
-[api/openapi.yaml](api/openapi.yaml).
+A coding agent working on a large task fans out subagents, and each
+subagent starts its own processes: type checkers, test runners, dev
+servers, headless browsers. On one machine this goes wrong in familiar
+ways. Memory runs out and the kernel kills something at random, often the
+agent that was doing the work. When a subagent is stopped, by its planner,
+by a usage limit or by a crash, the processes it started keep running,
+holding memory nobody accounts for. And nothing tells the planner how much
+room there is before it starts the next worker.
+
+subactl puts every agent in a **lease**: a group of processes with a memory
+envelope that comes out of its parent's. It keeps three promises:
+
+- **Memory is never oversold.** A lease is admitted only if its envelope
+  fits; a lease over its own limit is ended with everything below it, with
+  code 413, and its neighbours do not notice.
+- **When a lease ends, everything in it is gone**: every process it
+  started, however it was started, and every lease below it.
+- **The machine stays up.** When something outside the agents takes the
+  memory, subactl stops admitting, warns the planners, and if that is not
+  enough ends one lease at a time, before the kernel would.
+
+Around this: suggested envelopes from measured peaks, NEAR_LIMIT warnings,
+wall-time and output limits, termination codes that say why each lease
+ended, an audit log, Prometheus metrics, `subactl top` and per-lease
+traces, and an inbox and progress beacons for the agent tree. `subactld`
+is the daemon, `subactl` the CLI; the only contract is
+[api/openapi.yaml](api/openapi.yaml), with a Go client in [client](client).
+
+## Platforms
+
+subactl supports **Linux and macOS** only. On any other system, Windows
+included, the build fails at once with
+`undefined: subactl_supports_only_linux_and_macos`.
+
+- **Linux** enforces: cgroup v2, a lease per cgroup, hard memory limits,
+  kernel-side group kills, escape prevention, identity by cgroup
+  membership. The daemon runs as root, under systemd if you like.
+- **macOS** monitors: there is no cgroup, so the backend tracks each
+  lease's processes from the process table, checks their physical
+  footprint every 200ms and kills a lease that is over its limit. It
+  reports every capability as soft or monitor_only, and a request that
+  needs hard enforcement is refused. The daemon runs as an ordinary user.
+
+## Does it work?
+
+subactl is developed against a benchmark: a minimal multi-agent harness
+upgrading the [radix-ui/primitives](https://github.com/radix-ui/primitives)
+component library to React 19, one worker per package, each with its own
+dev server and browser, run in a 12GiB "blast chamber" on a physical
+Linux machine. In short:
+
+| | packages done | processes left behind | chamber out of memory |
+| --- | --- | --- | --- |
+| without subactl | 4% | up to 116 per run | in every run |
+| subactl, fixed envelopes | 41% | none, ever | never |
+| subactl, suggested envelopes | 53% | none, ever | never |
+
+With a real model doing the work instead of the script, the same: all
+packages done either way, but without subactl every run left 84 to 153
+processes and filled the chamber, and with it none did. Of the four
+hypotheses set before the runs, one held, two were refuted, and one held
+for fixed envelopes and failed for suggested ones; the details, including
+what did not work, are in [docs/benchmark.md](docs/benchmark.md).
+
+## Documentation
+
+- [DESIGN.md](DESIGN.md): the design (in Chinese), annotated where the
+  implementation differs.
+- [docs/benchmark.md](docs/benchmark.md): the benchmark: the task, the
+  harness, the setup, the hypotheses and the results.
+- [docs/testing.md](docs/testing.md): the test suites, and the Linux and
+  macOS machines they run on.
+- [skill/subactl.md](skill/subactl.md): how an agent uses subactl.
+- [api/openapi.yaml](api/openapi.yaml): the API.
 
 ## Status
 
-- **M0, contract and skeleton: done.** The contract, the public Go client,
-  the in-memory ledger, the lease lifecycle and the CLI.
-- **M1, baseline: done.** `examples/mini-agent` in `without` mode hits
-  the memory cap in five of five runs and leaves processes behind in four
-  (in the fifth the kernel's OOM killer took the orphans too); see
-  [the results](examples/mini-agent/bench/results/README.md).
-- **M2, Linux enforcement core: done.** The cgroup v2 backend, the pre-exec
-  shim, nested leases, whole-group reaping, escape prevention and
-  fail-closed restart. Integration tests named after the acceptance
-  criteria run on a real kernel with `make integration`: under sudo on
-  Linux, in a privileged Docker container elsewhere.
-- **M3, quota and observability: done.** Effective capacity that follows
-  external load, the capacity-shrunk state, the safety net, NEAR_LIMIT,
-  wall-time and output limits, the audit log, quota suggestions,
-  Prometheus metrics and per-lease traces (F5-F11, F30, F32).
-- **M4, agent tree and communication: done.**
-  The lead's terminal and `subactl run -it`, mini-agent's self-wrapping
-  and adapter, identity by cgroup membership, the inbox, graceful
-  termination, declared policies, progress beacons, idle detection,
-  `subactl top`, and the skill in [skill/subactl.md](skill/subactl.md).
-- **M5, experiments: done.** Groups of five runs on the radix upgrade
-  task, on a physical x86-64 machine: without subactl every run hits the
-  memory cap and four of five leave processes behind; with it no run of
-  fifteen does either. Completion is 4% without subactl, 41% with fixed
-  envelopes, 53% with suggested ones, and 24% with DeepSeek as the planner
-  sizing the workers itself. One hypothesis holds, one holds without having
-  been put under strain, two are refuted. With DeepSeek as lead and workers
-  doing the real work, the same holds: everything left behind and a full
-  chamber without subactl, nothing with it. See
-  [the results](examples/mini-agent/bench/results/README.md).
-- **The real brain** speaks the Anthropic Messages API over `net/http` and
-  has been run against DeepSeek and Z.AI through their compatible
-  endpoints, on its own and as a lead with child agents under subactl.
-  Against Anthropic's own API it is tested with recorded streams only.
-- **F27's CPU bound is met on bare metal.** Next to a lead that keeps
-  every CPU busy, a quiet lead's p95 task time rose by 1% to 2% on sixteen
-  identical cores of a physical machine, and by 9% with fast and slow
-  cores mixed; the design allows 20%. On virtual machines the bound cannot
-  be measured, because their CPUs are not independent: there a task slows
-  far more than that with no cgroups at all. `SUBACTL_F27_STRICT=1 make
-  integration` enforces the bound.
-- **M6, macOS: done, as monitoring only.** The `darwin` backend keeps a
-  membership table from the process table, samples physical footprint and
-  kills a lease that is over its limit, checking every 200ms; its default
-  reserve line is 25% of memory rather than 15%, for what a lease
-  allocates between two checks. It reports every
-  capability as soft or monitor_only and escape prevention as unsupported,
-  so a request that requires hard enforcement is refused. `subactld` runs
-  there as an ordinary user. The effective capacity follows the kernel's
-  own memory-pressure figure, in whole percent and after compression, so
-  it moves less than the memory other programs allocate.
-- Only Linux and macOS are supported; Windows is out of scope.
+All milestones are done: the contract and client (M0), the baseline
+benchmark (M1), Linux enforcement (M2), quotas and observability (M3), the
+agent tree and its communication (M4), the experiments (M5), and the macOS
+backend (M6). Every acceptance criterion, F1 to F33, has an automated
+test, on a real kernel where it needs one. CPU fairness (F27) is met on bare metal: next to a
+lead that keeps every CPU busy, a quiet lead's task time rose 1% to 2%,
+against 20% allowed.
 
 ## Try it
 
@@ -76,16 +101,10 @@ bin/subactl ls
 bin/subactl terminate <lead> --grace 1s
 ```
 
-## The baseline experiment
-
-`mini-agent` plays a scripted scenario: a lead fans out one worker per
-package, workers start dev servers and browsers, and at a fixed time the
-usage limit is hit and the harness kills each subagent's pid and nothing
-else. `bench` runs that inside a blast chamber, an outer cgroup with a hard
-memory cap, and measures what happens.
+With the benchmark's harness:
 
 ```sh
-# The toy task needs no toolchain and runs anywhere.
+# The toy scenario needs no toolchain and runs anywhere.
 bin/mini-agent --mode without --scenario examples/mini-agent/scenarios/toy.yaml
 
 # Under subactl: start the daemon (root, Linux), then run the lead.
@@ -93,17 +112,15 @@ sudo bin/subactld --socket-group "$(id -gn)" &
 bin/mini-agent --mode with --scenario examples/mini-agent/scenarios/toy.yaml
 bin/subactl top
 
-# With a real model instead of the script. The key is read from the
-# environment: DEEPSEEK_API_KEY, ZAI_API_KEY or ANTHROPIC_API_KEY.
-bin/mini-agent --mode with --brain real --provider deepseek --prompt "..."
-
-# Group A on the real task (radix-ui/primitives to React 19), five runs,
-# in a Docker chamber capped at 12G. Needs Docker; the first run prepares
-# the task environment.
-examples/mini-agent/bench/chamber/run.sh A examples/mini-agent/scenarios/radix.yaml 5 /tmp/bench/A
-# ... the same for B and C, then:
-bin/bench report --in /tmp/bench
+# With a model instead of the script, over the Anthropic Messages API:
+# Anthropic's own or a compatible endpoint. --provider picks a preset
+# (bin/mini-agent -h lists them), --base-url and --model override it, and
+# the key is read from the environment.
+bin/mini-agent --mode with --brain real --prompt "..."
 ```
+
+Running the full benchmark is described in
+[docs/benchmark.md](docs/benchmark.md#running-it).
 
 ## Install as a service (Linux)
 
@@ -124,7 +141,10 @@ outlives the daemon, whether or not it comes back.
 
 ```sh
 make lint test
+make integration   # Linux: under sudo; elsewhere: in a privileged Docker container
 ```
 
 The project uses only the Go standard library, `golang.org/x/sys` and
-`golang.org/x/term`; a test fails on any other import.
+`golang.org/x/term`; a test fails on any other import. `make lint` also
+checks that every public package fails to build on Windows and FreeBSD
+with the message above.

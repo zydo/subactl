@@ -49,7 +49,7 @@ v1 要解决六个问题：
 
 目标（v1）：
 
-1. 交付 Go 编写的 daemon `subactld` 与 CLI `subactl`（含 `subactl top`、`subactl trace`）。契约只有 `api/openapi.yaml`，v1 只提供一个用标准库手写的公开 Go client 包，由 CI 对照契约校验一致性。整个项目只用 Go 标准库和官方扩展库 golang.org/x/sys、golang.org/x/term，不引入第三方依赖（实现：YAML 用自写的严格子集解析器 `yamlite`，实验数据的 Parquet 文件由手写的最小 writer 生成）。subactl 只支持 Linux 和 macOS：Linux（cgroup v2）是主平台，macOS 做到 monitor 级别。cgroup v1 不在范围内。
+1. 交付 Go 编写的 daemon `subactld` 与 CLI `subactl`（含 `subactl top`、`subactl trace`）。契约只有 `api/openapi.yaml`，v1 只提供一个用标准库手写的公开 Go client 包，由 CI 对照契约校验一致性。整个项目只用 Go 标准库和官方扩展库 golang.org/x/sys、golang.org/x/term，不引入第三方依赖（实现：YAML 用自写的严格子集解析器 `yamlite`，实验数据的 Parquet 文件由手写的最小 writer 生成）。subactl 只支持 Linux 和 macOS：Linux（cgroup v2）是主平台，macOS 做到 monitor 级别。cgroup v1 不在范围内。在其他系统（包括 Windows）上构建时立即失败，报错为 `undefined: subactl_supports_only_linux_and_macos`（实现：每个公开包和命令都有一个只在其他系统上编译的 `unsupported.go`；`make lint` 检查每个公开包在 Windows 和 FreeBSD 上都只在这里失败）。
 2. 管理的资源维度：内存硬限、CPU、进程数、wall time、输出上限。
 3. 提供不超卖的配额账本，并支持对运行中的 subagent 调整配额。
 4. acgroup 结束时整组回收。结束的原因可以是主进程退出、父节点退出（包括 lead 的终端被关闭）或外部中止。
@@ -798,7 +798,7 @@ C 组的 planner 用确定性规则实现（代码 planner），以保证可复�
 正文中标为“（实现）”的地方已经写明实际做法。按类别汇总如下，便于对照最初的设计。
 
 **范围**
-- 只支持 Linux 和 macOS。macOS monitor backend 已交付；Windows 原计划 v1.1，已移出范围。
+- 只支持 Linux 和 macOS。macOS monitor backend 已交付；Windows 原计划 v1.1，已移出范围。在其他系统上构建立即失败并说明原因，原先在其他系统上静默返回错误的 pty、对端身份和内存总量实现已删除。
 - YAML 用自写的严格子集解析器，Parquet 用手写的最小 writer，以保持零第三方依赖。
 
 **API 与 CLI**
