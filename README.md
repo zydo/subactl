@@ -9,6 +9,9 @@
 
 <p align="center">English | <a href="README.zh-CN.md">中文</a></p>
 
+> [!WARNING]
+> subactl is in early development and not ready for production use. Its API, CLI and on-disk formats may still change without notice.
+
 <p align="center"><img src="docs/assets/how-subactl-works.svg" alt="How Subagent Controller Works: a lead agent's lease holds its workers' leases; a worker over its limit is ended with everything it started" width="880"></p>
 
 A coding agent working on a large task fans out subagents, and each
