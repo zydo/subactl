@@ -2,6 +2,11 @@
 
 <p align="center"><b>Suba</b>gent <b>C</b>on<b>t</b>ro<b>l</b>ler: a single-host resource controller for AI agents that start other agents</p>
 
+<p align="center">
+  <a href="https://github.com/zydo/subactl/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/zydo/subactl/ci.yml?branch=main&amp;label=CI&amp;logo=githubactions&amp;logoColor=white&amp;style=for-the-badge&amp;labelColor=1f2328"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/zydo/subactl?color=6e7781&amp;style=for-the-badge&amp;labelColor=1f2328"></a>
+</p>
+
 English | [简体中文](README.zh-CN.md)
 
 A coding agent working on a large task fans out subagents, and each

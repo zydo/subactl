@@ -153,13 +153,13 @@ func TestDocTranslations(t *testing.T) {
 			}
 			// At the top: the first line, or after a title block (the README
 			// has a centered title and subtitle above it).
-			lines := strings.SplitN(string(data), "\n", 11)
+			lines := strings.SplitN(string(data), "\n", 21)
 			found := false
-			for _, line := range lines[:min(len(lines), 10)] {
+			for _, line := range lines[:min(len(lines), 20)] {
 				found = found || line == first
 			}
 			if !found {
-				t.Errorf("%s%s: no line %q in its first 10 lines", dir, file, first)
+				t.Errorf("%s%s: no line %q in its first 20 lines", dir, file, first)
 			}
 		}
 		pairs++
