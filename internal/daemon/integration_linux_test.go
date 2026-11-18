@@ -1340,9 +1340,10 @@ func TestIntegrationTopProcsAfterOOM(t *testing.T) {
 // limit is never reached.
 func TestIntegrationCapacityGuard(t *testing.T) {
 	e := newEnvIn(t, 640*mib, 160*mib)
-	// Admitted while the machine has room, as the workers of a planner are;
-	// it waits for the signal to grow.
-	id := e.run(e.op, 400*mib, `while [ ! -f "$SUBACTL_SCRATCH/go" ]; do sleep 0.1; done; `+hog)
+	// A worker of a lead, admitted while the machine has room; it waits
+	// for the signal to grow.
+	lead := e.run(e.op, 450*mib, "exec sleep 600")
+	id := e.run(node(lead), 400*mib, `while [ ! -f "$SUBACTL_SCRATCH/go" ]; do sleep 0.1; done; `+hog)
 	// Then 300MiB is taken outside every lease (awk, so that no Node is
 	// needed), and the guard follows it down.
 	external := exec.Command("/bin/sh", "-c", `exec awk 'BEGIN { s = sprintf("%314572800s", ""); system("sleep 600") }'`)
@@ -1370,6 +1371,28 @@ func TestIntegrationCapacityGuard(t *testing.T) {
 	}
 	if n := ownOOMsOf(e.outer); n != 0 {
 		t.Fatalf("the machine's own limit was reached %d times", n)
+	}
+	// The guard ends that one lease, not the lead above it with all its
+	// workers.
+	time.Sleep(time.Second)
+	if ls, err := e.m.Get(context.Background(), e.op, lead); err != nil || ls.State != api.StateRunning {
+		t.Fatalf("the lead did not survive: %+v %v", ls, err)
+	}
+}
+
+// A lease over its own limit ends with its whole subtree, also when the
+// process the kernel chose sits in one of its children: the lease that hit
+// its limit ends as 413, the child as 502.
+func TestIntegrationNestedLimit(t *testing.T) {
+	e := newEnv(t)
+	parent := e.run(e.op, 96*mib, `x=$(head -c 30000000 /dev/zero | tr '\0' x); sleep 600`) // the shell holds about 30MB
+	time.Sleep(time.Second)
+	kid := e.run(node(parent), 96*mib, hog)
+	if term := e.wait(parent, 30*time.Second); term.Code != api.CodeOOMLeaseLimit {
+		t.Fatalf("parent: ended with %d %s: %+v", term.Code, term.Name, term.Evidence)
+	}
+	if term := e.wait(kid, 5*time.Second); term.Code != api.CodeParentDied {
+		t.Fatalf("child: ended with %d %s: %+v", term.Code, term.Name, term.Evidence)
 	}
 }
 

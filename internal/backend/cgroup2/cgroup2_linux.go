@@ -261,11 +261,6 @@ func (b *Backend) Create(_ context.Context, lease api.LeaseID, parent backend.AC
 	if err := limits(dir, env, b.caps.CPU == api.LevelHard); err != nil {
 		return fail(err)
 	}
-	// When the limit is hit the whole acgroup dies together, never a
-	// single victim inside it.
-	if err := write(filepath.Join(dir, "memory.oom.group"), "1"); err != nil {
-		return fail(err)
-	}
 	// With swap the limit would not be a limit on memory. Kernels without
 	// the swap controller have no such file.
 	if err := write(filepath.Join(dir, "memory.swap.max"), "0"); err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -279,7 +274,18 @@ func (b *Backend) Create(_ context.Context, lease api.LeaseID, parent backend.AC
 	if err := os.Mkdir(filepath.Join(dir, selfLeaf), 0o755); err != nil {
 		return fail(err)
 	}
+	// The leaf has the memory controller once delegate enabled it. When a
+	// limit is hit the kernel kills, together, the processes of the
+	// topmost cgroup with memory.oom.group set between its victim and that
+	// limit. Set on the lease itself, that would be the topmost lease: a
+	// hit of the capacity guard over all leases would take a lead with all
+	// its workers. Set on the leaf alone, it is always one lease's own
+	// processes; the daemon then ends the lease whose own limit was hit,
+	// with its subtree (see onMainExit), or only that lease for the guard.
 	if err := b.delegate(dir); err != nil {
+		return fail(err)
+	}
+	if err := write(filepath.Join(dir, selfLeaf, "memory.oom.group"), "1"); err != nil {
 		return fail(err)
 	}
 	b.dirs[lease] = dir
@@ -830,8 +836,8 @@ func (b *Backend) TopProcs(_ context.Context, g backend.ACGroup, n int) ([]api.P
 }
 
 // SetGuard sets memory.max of the base cgroup, which holds every lease.
-// Its memory.oom.group stays 0: the kernel then ends one lease, whose own
-// group setting takes its whole tree, not every lease at once.
+// Its memory.oom.group stays 0, as do the leases': a hit ends one lease's
+// own processes, those of the leaf it has memory.oom.group set on.
 func (b *Backend) SetGuard(_ context.Context, limit int64) error {
 	v := "max"
 	if limit > 0 {

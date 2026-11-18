@@ -1,7 +1,13 @@
-# H4 under real pressure: the radix scenario of groups B and C, with the
-# external interference raised from 30% to 50% of the chamber, so that the
-# memory left falls below the reserve line and the safety net must act.
-# In round 4, at 30%, it never did, and H4 held without being tested.
+# H4 under real pressure: the radix scenario of groups B and C with harder
+# external interference, so that the safety net has to act. Under subactl
+# admission stops as soon as capacity is short, so the net acts only when
+# the interference alone leaves less than the reserve line plus what the
+# workers already running use. Trials that did not get there: 30% at 7m
+# (round 4), 50% and 75% at 7m (the workers then running finished seconds
+# later), and 60% at 5m30s (the running workers peaked at 3.6GiB, the
+# memory left never fell below 3GiB). Here: 75% at 5m30s, as a new batch
+# of workers is running after the usage limit; 12 - 9 - 3.6GiB is below
+# the 1.8GiB reserve line.
 seed: 1
 task: radix
 fanout: 32             # G1: one worker per package, up to 32 at once
@@ -12,10 +18,10 @@ duration: 15m
 fanout_at: 2m          # G1 fan-out begins
 quota_at: 5m           # G4: the usage limit; the harness SIGKILLs subagent pids only
 quota_for: 20s
-interference_at: 7m    # a process that is not an agent takes 30% of capacity
+interference_at: 5m30s  # a process that is not an agent takes 75% of capacity
 interference_ramp: 30s
 interference_for: 4m
-interference_share: 0.5
+interference_share: 0.75
 output_runaway_at: 9m  # G5
 # Under subactl (groups B and C). Group B uses these limits as they are.
 # Group C starts each worker from what subactl suggests for its kind once
