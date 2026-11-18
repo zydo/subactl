@@ -1,0 +1,30 @@
+{
+  "group": "A",
+  "run": 2,
+  "scenario": "radix-real.yaml",
+  "chamber_bytes": 12884901888,
+  "mem_basis": "working_set",
+  "host_peak_ws": 12,
+  "host_oom": 13906,
+  "oom_kills": 384,
+  "meltdown": false,
+  "orphans_after": 114,
+  "leaked_ws_after": 5.807262420654297,
+  "completion": 0,
+  "packages": 8,
+  "work_lost": 13,
+  "util_mean": 0.314794027990893,
+  "safety_net_count": 0,
+  "makespan": 9.333680246983333,
+  "lead_exit": 75,
+  "orphan_sample": [
+    "node /srv/radix/wt/a-17-2/aspect-ratio/node_modules/.bin/storybook dev -p 9026 --ci --no-open",
+    "/srv/radix/wt/a-17-2/aspect-ratio/node_modules/@storybook/core-common/node_modules/@esbuild/linux-x64/bin/esbuild --serv…",
+    "node /srv/radix/wt/a-17-2/checkbox/node_modules/.bin/storybook dev -p 9027 --ci --no-open",
+    "node /srv/radix/wt/a-17-2/accessible-icon/node_modules/.bin/storybook dev -p 9028 --ci --no-open",
+    "/srv/radix/wt/a-17-2/checkbox/node_modules/@storybook/core-common/node_modules/@esbuild/linux-x64/bin/esbuild --service=…",
+    "/srv/radix/wt/a-17-2/aspect-ratio/node_modules/@storybook/builder-manager/node_modules/@esbuild/linux-x64/bin/esbuild --…",
+    "/srv/radix/wt/a-17-2/accessible-icon/node_modules/@storybook/core-common/node_modules/@esbuild/linux-x64/bin/esbuild --s…",
+    "node /srv/radix/wt/a-17-2/alert-dialog/node_modules/.bin/storybook dev -p 9029 --ci --no-open"
+  ]
+}

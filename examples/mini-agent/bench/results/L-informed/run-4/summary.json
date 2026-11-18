@@ -1,0 +1,26 @@
+{
+  "group": "L",
+  "run": 4,
+  "scenario": "radix-llm-planner-informed.yaml",
+  "chamber_bytes": 12884901888,
+  "mem_basis": "working_set",
+  "host_peak_ws": 6.399959564208984,
+  "host_oom": 0,
+  "oom_kills": 846,
+  "meltdown": false,
+  "orphans_after": 0,
+  "leaked_ws_after": 0.5819015502929688,
+  "completion": 0.3888888888888889,
+  "packages": 54,
+  "work_lost": 9,
+  "util_mean": 0.12098055021489118,
+  "safety_net_count": 0,
+  "makespan": 15.002122236083334,
+  "lead_exit": 0,
+  "codes": {
+    "200": 48,
+    "413": 8,
+    "502": 5,
+    "520": 1
+  }
+}

@@ -7,6 +7,10 @@ how the runs were made and how far the conclusions reach.
 
 This is round 4, the one the design's conclusions rest on. Beside it:
 
+- `h4/`: round 5, H4 under 75% interference, where the safety net has
+  to act.
+- `L-informed/`: round 5, group L with a planner told how to size its
+  workers.
 - `real-model/`: the check with a real model as lead and workers.
 - `L-before-guard/`: the first five runs of group L, before the capacity
   guard (see below).
@@ -51,7 +55,7 @@ to 53%; B's from 40% to 41%.
 | H1 | refuted, in one run of A | A left 12 to 116 processes behind in four runs and none in the fifth; B, C and L left none in any of fifteen runs |
 | H2 | holds | A hit the chamber's cap in every run; B, C and L never did |
 | H3 | refuted | C's utilisation is 4.3 points above B's, not 15, and C lost more work (21.4 against 15.2 subtasks) |
-| H4 | holds, but untested | the safety net never fired in B or C |
+| H4 | holds, but untested here; in round 5, holds for B and is refuted for C | the safety net never fired in B or C; at 75% interference (`h4/`) it ended one lease per run in B and two in C, always after the warning |
 
 Completion: A 4%, B 41%, C 53%, L 24%.
 
@@ -75,7 +79,9 @@ fewer, fewer went over and fewer packages were done (16 workers and 3 over
 their limit in run 5). The first five runs, before the guard, look the
 same: 17% to 31%, envelopes from 1.5 to 6GiB. The rule of group C, the
 95th percentile of past peaks times 1.2, needs none of that judgment and
-does better.
+does better. Told how to size its workers (`L-informed/`), the model
+gave each the suggestion and still completed 22%: it started 11 to 35
+workers a run where B and C start 80 to 95.
 
 ## The capacity guard
 
@@ -112,6 +118,8 @@ that it does no harm, not that it helps. That is shown by the test.
 - **H4 says less than it seems.** The interference took 30% of the chamber
   and B and C never fell below the reserve line. The safety net is shown by
   the integration tests for F8 and F10, and the capacity guard by its own.
+  Round 5 (`h4/`) raised the interference to 75%, arriving while workers
+  run, so that the net had to act.
 - **The chamber is an outer cgroup, not a separate machine.** "The host
   goes down" is the chamber's limit being hit and the kernel killing inside
   it. The watchdog never declared a meltdown.
